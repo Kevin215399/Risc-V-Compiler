@@ -1,11 +1,12 @@
 #include "Common.h"
 #include "Lexer.h"
+#include "SyntaxAnalyzer.h"
 
-char *sourceCode = "int test = 5; test += 4; if";
+char *sourceCode = "if(a<0){a=5;}";
 
 void InitializeClasses()
 {
-    // nothing yet...
+    SetupCFG();
 }
 
 int main()
@@ -18,6 +19,7 @@ int main()
 
     GeneralList *tokens = (GeneralList *)malloc(sizeof(GeneralList));
     InitializeList(tokens);
+
     Error *error = LexicalAnylsis(sourceCode, tokens);
     printf("Done\n");
     if (error->errorCode != NO_ERROR)
@@ -34,6 +36,19 @@ int main()
         Token *token = (Token *)ListGetIndex(tokens, i);
         printf("Token: %d, %s\n", token->type, token->value);
     }
+    sleep_ms(300);
+
+    TreeNode *tree = (TreeNode*)malloc(sizeof(TreeNode));
+    error = AnalyzeSyntax(tokens, tree);
+    printf("Done\n");
+    if (error->errorCode != NO_ERROR)
+    {
+        printf("Error: %d\n", error->errorCode);
+        free(error);
+        goto stall;
+    }
+    free(error);
+
 
 stall:
     while (1)

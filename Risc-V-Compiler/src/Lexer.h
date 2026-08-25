@@ -200,7 +200,7 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
             }
             printf("Identifier len: %d\n", tokenLength);
 
-            matchType = LITERAL;
+            matchType = IDENTIFIER;
             goto allocateToken;
         }
 

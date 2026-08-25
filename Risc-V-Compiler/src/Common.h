@@ -1,6 +1,7 @@
 #ifndef COMMON
 #define COMMON
 #include "tools/GeneralList.h"
+#include "tools/BinaryTree.h"
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include <string.h>
@@ -8,6 +9,7 @@
 extern char *sourceCode;
 
 #pragma region Objects
+//Lexer tokens
 typedef enum TokenType
 {
     IDENTIFIER,
@@ -17,7 +19,32 @@ typedef enum TokenType
     LITERAL,
     NONE
 } TokenType;
+typedef struct Token
+{
+    uint16_t lineNumber;
+    TokenType type;
+    char *value;
+} Token;
 
+//Indentifiers
+
+typedef enum IdnetifierType {
+    INT,
+    FLOAT,
+    UINT8_T,
+    UINT16_T,
+    UINT32_T,
+    BOOL,
+    CHAR
+} IdnetifierType;
+
+typedef struct Identifier {
+    IdnetifierType type;
+    char* name;
+} Identifier;
+
+
+//Error codes
 typedef enum ErrorCode
 {
     NO_ERROR,
@@ -31,15 +58,9 @@ typedef enum Location
 {
     OTHER,
     LEXER,
+    SYNTAX_ANALYZER,
     USER_SCRIPT
 } Location;
-
-typedef struct Token
-{
-    uint16_t lineNumber;
-    TokenType type;
-    char *value;
-} Token;
 
 typedef struct Error
 {

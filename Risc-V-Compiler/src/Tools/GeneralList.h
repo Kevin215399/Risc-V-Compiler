@@ -58,6 +58,13 @@ void PushList(GeneralList* list, void* content)
 
     list->lastElement->content = content;
 }
+void* PeekList(GeneralList* list){
+    if (list->count == 0)
+        return NULL;
+
+    void* content = list->lastElement->content;
+    return content;
+}
 
 void* PopList(GeneralList* list)
 {
@@ -204,6 +211,11 @@ void CpyList(GeneralList* to, GeneralList* from, size_t contentSize)
         PushList(to, cpy);
     }
     to->count += from->count;
+}
+void EmptyList(GeneralList* list){
+    while(list->count > 0){
+        free(PopList(list));
+    }
 }
 
 
