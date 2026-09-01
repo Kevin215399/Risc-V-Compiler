@@ -39,6 +39,7 @@ int main()
     sleep_ms(300);
 
     TreeNode *tree = (TreeNode*)malloc(sizeof(TreeNode));
+    InitializeTree(tree);
     error = AnalyzeSyntax(tokens, tree);
     printf("Done\n");
     if (error->errorCode != NO_ERROR)
@@ -48,6 +49,8 @@ int main()
         goto stall;
     }
     free(error);
+
+    
 
 
 stall:

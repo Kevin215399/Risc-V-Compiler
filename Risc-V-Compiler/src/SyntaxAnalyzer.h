@@ -259,8 +259,14 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
         goto exit;
     }
 
+    TreeNode *tree = output;
+
     GeneralList stack;
     InitializeList(&stack);
+
+    GeneralList treeNavStack;
+    InitializeList(&treeNavStack);
+
     // Push body non terminator
     PushByte(&stack, TERM_OFFSET + 0);
     uint32_t tokenIndex = 0;
@@ -279,6 +285,23 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
         if ((*top) == '\0')
         {
             free(PopList(&stack));
+            uint8_t *topValue = (uint8_t *)PeekList(&treeNavStack);
+            if ((*topValue) == 0)
+            {
+                // Go to the next left node
+                while ((*topValue) == 0)
+                {
+                    free(PopList(&treeNavStack));
+                    if (treeNavStack.count == 0)
+                    {
+                        // Reached root node
+                        printf("tree root found, exitting\n");
+                        goto exit;
+                    }
+                    topValue = (uint8_t *)PeekList(&treeNavStack);
+                }
+            }
+            (*topValue)--;
             continue;
         }
         Token *token = (Token *)ListGetIndex(tokens, 0);
@@ -302,6 +325,24 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
             printf("Match, pop: %s\n", token->value);
             free(PopList(&stack));
             free(PopListFirst(tokens));
+
+            uint8_t *topValue = (uint8_t *)PeekList(&treeNavStack);
+            if ((*topValue) == 0)
+            {
+                // Go to the next left node
+                while ((*topValue) == 0)
+                {
+                    free(PopList(&treeNavStack));
+                    if (treeNavStack.count == 0)
+                    {
+                        // Reached root node
+                        printf("tree root found, exitting\n");
+                        goto exit;
+                    }
+                    topValue = (uint8_t *)PeekList(&treeNavStack);
+                }
+            }
+            (*topValue)--;
         }
         else if ((*top) >= 128)
         {
@@ -353,18 +394,30 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
             for (int i = rule->count - 1; i >= 0; i--)
             {
                 char *newRule = (char *)ListGetIndex(rule, i);
-                char *copiedChar = (char *)malloc(strlen(newRule) + 1);
                 printf("Push rule\n");
                 if ((*newRule) >= 128)
                 {
                     printf("%d\n", (*newRule) - TERM_OFFSET);
                     PushByte(&stack, (uint8_t)(*newRule));
+
+                    uint8_t *nodeValue = (uint8_t *)malloc(sizeof(uint8_t));
+                    (*nodeValue) = (uint8_t)(*newRule);
+                    AppendTreeFromRoot(tree, &treeNavStack, nodeValue);
                 }
                 if ((*newRule) < 128)
                 {
                     printf("%s\n", newRule);
                     PushCharArr(&stack, newRule);
+
+                    char *copiedChar = (char *)malloc(strlen(newRule) + 1);
+                    strcpy(copiedChar, newRule);
+                    AppendTreeFromRoot(tree, &treeNavStack, copiedChar);
                 }
+            }
+            if (rule->count > 0)
+            {
+                // Move navigator to the last element
+                PushByte(&treeNavStack, rule->count - 1);
             }
             printf("OK\n");
         }
