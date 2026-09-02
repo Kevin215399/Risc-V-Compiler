@@ -24,19 +24,19 @@ TreeNode *TreeGetNode(TreeNode *root, GeneralList *navMap)
     for (int i = 0; i < navMap->count; i++)
     {
         uint8_t *child = (uint8_t *)ListGetIndex(navMap, i);
-        printf("navigate: %d\n", (int)(*child));
+        //printf("navigate: %d\n", (int)(*child));
         if ((*child) >= currentNode->children.count)
         {
             printf("navigate fail\n");
-            printf("only has %d children\n",currentNode->children.count);
+            printf("only has %d children\n", currentNode->children.count);
             return NULL;
         }
         currentNode = (TreeNode *)ListGetIndex(&currentNode->children, (*child));
     }
-    printf("navigate sucess\n");
+    //printf("navigate sucess\n");
     return currentNode;
 }
-bool AppendTree(TreeNode *parent, void *content)
+void AppendTree(TreeNode *parent, void *content)
 {
     printf("pushing tree\n");
     TreeNode *newNode = malloc(sizeof(TreeNode));
@@ -48,7 +48,10 @@ bool AppendTree(TreeNode *parent, void *content)
 bool AppendTreeFromRoot(TreeNode *root, GeneralList *parentNavMap, void *content)
 {
     TreeNode *parent = TreeGetNode(root, parentNavMap);
+    if (parent == NULL)
+        return false;
     AppendTree(parent, content);
+    return true;
 }
 
 #endif

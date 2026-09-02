@@ -259,7 +259,6 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
         goto exit;
     }
 
-    TreeNode *tree = output;
 
     GeneralList stack;
     InitializeList(&stack);
@@ -402,7 +401,7 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
 
                     uint8_t *nodeValue = (uint8_t *)malloc(sizeof(uint8_t));
                     (*nodeValue) = (uint8_t)(*newRule);
-                    AppendTreeFromRoot(tree, &treeNavStack, nodeValue);
+                    AppendTreeFromRoot(output, &treeNavStack, nodeValue);
                 }
                 if ((*newRule) < 128)
                 {
@@ -411,7 +410,7 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
 
                     char *copiedChar = (char *)malloc(strlen(newRule) + 1);
                     strcpy(copiedChar, newRule);
-                    AppendTreeFromRoot(tree, &treeNavStack, copiedChar);
+                    AppendTreeFromRoot(output, &treeNavStack, copiedChar);
                 }
             }
             if (rule->count > 0)
@@ -433,6 +432,7 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
     }
 
 exit:
+    printf("%d\n",(int)((TreeNode*)output->children.firstElement->content)->children.count);
     return error;
 }
 
