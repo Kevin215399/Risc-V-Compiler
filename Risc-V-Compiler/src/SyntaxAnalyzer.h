@@ -6,7 +6,7 @@
 
 #define TERMINATORS 21
 #define NONTERMINATORS 18
-const char *NonTerms[] = {"IDENTIFIER", "TYPE", "LITERAL", "\0", "while", "if", "}", ")", ";", "(", "<", ">", "<=", ">=", "!=", "==", "+", "-", "*", "/", "=", "void", "char", "int", "bool", "float"};
+const char *NonTerms[] = {"IDENTIFIER", "TYPE", "LITERAL", "\0", "while", "if", "}", ")", ";", "(", "<", ">", "<=", ">=", "!=", "==", "+", "-", "*", "/", "="};
 #define BODY 0
 #define LINE 1
 #define DECLARATION 2
@@ -22,26 +22,13 @@ const char *NonTerms[] = {"IDENTIFIER", "TYPE", "LITERAL", "\0", "while", "if", 
 #define MULTIPLY 12
 #define MULTIPLYREST 13
 #define ATOM 14
-#define TYPE 15
+#define TYPE_TERM 15
 #define IDENTIFIER_TERM 16
 #define LITERAL_TERM 17
 
 GeneralList grammarTable[NONTERMINATORS][TERMINATORS];
 #define TERM_OFFSET 128
 
-void PushByte(GeneralList *list, uint8_t value)
-{
-    uint8_t *allocated = (uint8_t *)malloc(sizeof(uint8_t));
-    *allocated = value;
-    PushList(list, allocated);
-}
-
-void PushCharArr(GeneralList *list, char *value)
-{
-    char *allocated = (char *)malloc(strlen(value) + 1);
-    strcpy(allocated, value);
-    PushList(list, allocated);
-}
 uint8_t GetTermIndex(char *term)
 {
     uint8_t x = 255;
@@ -59,7 +46,10 @@ void AddTerm(char *term, uint8_t y, char *rule)
 {
     uint8_t x = GetTermIndex(term);
     if (x == 255)
+    {
+        printf("term index not found\n");
         return;
+    }
 
     PushCharArr(&grammarTable[y][x], rule);
 }
@@ -67,7 +57,10 @@ void AddNonTerm(char *term, uint8_t y, uint8_t nonterm)
 {
     uint8_t x = GetTermIndex(term);
     if (x == 255)
+    {
+        printf("term index not found\n");
         return;
+    }
     PushByte(&grammarTable[y][x], nonterm);
 }
 void SetupCFG()
@@ -101,7 +94,7 @@ void SetupCFG()
     AddNonTerm("if", LINE, TERM_OFFSET + IF);
 
     // Declaration
-    AddNonTerm("TYPE", DECLARATION, TERM_OFFSET + TYPE);
+    AddNonTerm("TYPE", DECLARATION, TERM_OFFSET + TYPE_TERM);
     AddNonTerm("TYPE", DECLARATION, TERM_OFFSET + IDENTIFIER_TERM);
     AddNonTerm("TYPE", DECLARATION, TERM_OFFSET + DECREST);
 
@@ -236,13 +229,6 @@ void SetupCFG()
     // Atom
     AddNonTerm("IDENTIFIER", ATOM, TERM_OFFSET + IDENTIFIER_TERM);
     AddNonTerm("LITERAL", ATOM, TERM_OFFSET + LITERAL_TERM);
-
-    // TYPE
-    AddTerm("void", TYPE, "void");
-    AddTerm("int", TYPE, "int");
-    AddTerm("float", TYPE, "float");
-    AddTerm("bool", TYPE, "bool");
-    AddTerm("char", TYPE, "char");
 }
 
 #pragma endregion
@@ -258,7 +244,6 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
         SetError(error, UNEXPECTED_NULL, SYNTAX_ANALYZER, "Missing output tree reference", 0);
         goto exit;
     }
-
 
     GeneralList stack;
     InitializeList(&stack);
@@ -285,21 +270,19 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
         {
             free(PopList(&stack));
             uint8_t *topValue = (uint8_t *)PeekList(&treeNavStack);
-            if ((*topValue) == 0)
+            // Go to the next left node
+            while ((*topValue) == 0)
             {
-                // Go to the next left node
-                while ((*topValue) == 0)
+                free(PopList(&treeNavStack));
+                if (treeNavStack.count == 0)
                 {
-                    free(PopList(&treeNavStack));
-                    if (treeNavStack.count == 0)
-                    {
-                        // Reached root node
-                        printf("tree root found, exitting\n");
-                        goto exit;
-                    }
-                    topValue = (uint8_t *)PeekList(&treeNavStack);
+                    // Reached root node
+                    printf("tree root found, exitting\n");
+                    goto exit;
                 }
+                topValue = (uint8_t *)PeekList(&treeNavStack);
             }
+
             (*topValue)--;
             continue;
         }
@@ -316,11 +299,28 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
                 isMatch = true;
             if ((*top) - TERM_OFFSET == LITERAL_TERM && token->type == LITERAL)
                 isMatch = true;
+            if ((*top) - TERM_OFFSET == TYPE_TERM && token->type == TYPE)
+                isMatch = true;
         }
         printf("Stack Top: %d\n", *top);
 
         if (isMatch)
         {
+
+            if ((*top) >= 128)
+            {
+                if (
+                    ((*top) - TERM_OFFSET == IDENTIFIER_TERM && token->type == IDENTIFIER) ||
+                    ((*top) - TERM_OFFSET == LITERAL_TERM && token->type == LITERAL) ||
+                    ((*top) - TERM_OFFSET == TYPE_TERM && token->type == TYPE))
+                {
+                    printf("literal, appending child as literal");
+                    char *copiedChar = (char *)malloc(strlen(token->value) + 1);
+                    strcpy(copiedChar, token->value);
+                    AppendTreeFromRoot(output, &treeNavStack, copiedChar);
+                }
+            }
+
             printf("Match, pop: %s\n", token->value);
             free(PopList(&stack));
             free(PopListFirst(tokens));
@@ -363,6 +363,11 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
                 {
                     printf("Term is literal\n");
                     matchingTerm = GetTermIndex("LITERAL");
+                }
+                if (token->type == TYPE)
+                {
+                    printf("Term is type\n");
+                    matchingTerm = GetTermIndex("TYPE");
                 }
                 if (matchingTerm == 255)
                 {
@@ -428,11 +433,10 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
             SetError(error, SYNTAX_ERROR, SYNTAX_ANALYZER, "Unexpected syntax", 0);
             goto exit;
         }
-        sleep_ms(100);
     }
 
 exit:
-    printf("%d\n",(int)((TreeNode*)output->children.firstElement->content)->children.count);
+    printf("%d\n", (int)((TreeNode *)output->children.firstElement->content)->children.count);
     return error;
 }
 
