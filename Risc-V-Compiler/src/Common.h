@@ -1,15 +1,24 @@
-#ifndef COMMON
-#define COMMON
-#include "tools/GeneralList.h"
-#include "tools/BinaryTree.h"
+#pragma once
+
+
 #include <stdio.h>
+#include "math.h"
 #include "pico/stdlib.h"
 #include <string.h>
+
+#include "Common/GeneralList.h"
+#include "Common/BinaryTree.h"
+#include "Common/Keywords.h"
+
+#include "ErrorFormatter.h"
+
 
 extern char *sourceCode;
 
 #pragma region Objects
-//Lexer tokens
+
+#pragma region LexerTokens
+
 typedef enum TokenType
 {
     IDENTIFIER,
@@ -17,6 +26,7 @@ typedef enum TokenType
     SEPERATOR,
     OPERATOR,
     LITERAL,
+    TYPE,
     NONE
 } TokenType;
 typedef struct Token
@@ -25,54 +35,36 @@ typedef struct Token
     TokenType type;
     char *value;
 } Token;
+#pragma endregion LexerTokens
 
-//Indentifiers
+#pragma region Identifiers
 
-typedef enum IdnetifierType {
+// Also update...
+// Keywords.h
+// Must match keywords' order, for ParseType()
+typedef enum IdentifierType
+{
     INT,
     FLOAT,
     UINT8_T,
-    UINT16_T,
+    UINT16_T, 
     UINT32_T,
     BOOL,
     CHAR
-} IdnetifierType;
+} IdentifierType;
 
-typedef struct Identifier {
-    IdnetifierType type;
-    char* name;
+typedef struct Identifier
+{
+    IdentifierType type;
+    char *name;
+    uint8_t pointerDepth;
 } Identifier;
 
+#pragma endregion Identifiers
 
-//Error codes
-typedef enum ErrorCode
-{
-    NO_ERROR,
-
-    SYNTAX_ERROR,
-    UNEXPECTED_NULL,
-    MALLOC_FAILURE
-} ErrorCode;
-
-typedef enum Location
-{
-    OTHER,
-    LEXER,
-    SYNTAX_ANALYZER,
-    USER_SCRIPT
-} Location;
-
-typedef struct Error
-{
-    uint16_t line;
-    ErrorCode errorCode;
-    Location location;
-    char *message;
-} Error;
 #pragma endregion
 
 #pragma region HelperFunctions
-
 
 bool IsNumber(char input)
 {
@@ -88,14 +80,60 @@ bool IsLetter(char input)
     }
     return false;
 }
-void SetError(Error *reference, ErrorCode error, Location location, char *message, uint16_t line)
-{
-    reference->errorCode = error;
-    reference->location = location;
-    reference->message = (char *)malloc(strlen(message) + 1);
-    strcpy(reference->message, message);
-    reference->line = line;
-}
-#pragma endregion
 
-#endif
+void PushByte(GeneralList *list, uint8_t value)
+{
+    uint8_t *allocated = (uint8_t *)malloc(sizeof(uint8_t));
+    *allocated = value;
+    PushList(list, allocated);
+}
+
+void PushCharArr(GeneralList *list, char *value)
+{
+    char *allocated = (char *)malloc(strlen(value) + 1);
+    strcpy(allocated, value);
+    PushList(list, allocated);
+}
+IdentifierType ParseType(char *input)
+{
+    IdentifierType output = INT;
+    bool error = true;
+    for (int i = 0; i < sizeof(typewords) / sizeof(typewords[0]); i++)
+    {
+        if (strcmp(typewords[i], input) == 0)
+        {
+            output = (IdentifierType)i;
+            error = false;
+            break;
+        }
+    }
+    if (error)
+    {
+        printf("!!!!!!!!! PARSETYPE() COULD NOT FIND MATCH FOR %s !!!!!!!\n", input);
+    }
+    return output;
+}
+int min(int a, int b)
+{
+    return a < b ? a : b;
+}
+int max(int a, int b)
+{
+    return a > b ? a : b;
+}
+
+int IntLength(int value)
+{
+    int numberLength = 1;
+    if (abs(value) != 0)
+    {
+        numberLength = (int)(log10(abs(value))) + 1;
+    }
+    if (abs(value) != value)
+    {
+        numberLength += 1;
+    }
+    return numberLength;
+}
+
+#pragma endregion
