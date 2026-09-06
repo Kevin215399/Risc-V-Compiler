@@ -1,45 +1,6 @@
 #ifndef LEXER_H
 #define LEXER_H
 
-#pragma region KeywordLists
-char *keywords[] = {
-    "if",
-    "while",
-    "return",
-    "int"};
-char *operators[] = {
-    "=",
-    "<=",
-    ">=",
-    "<",
-    ">",
-
-    "+",
-    "-",
-    "*",
-    "/",
-    "%%",
-
-    "+=",
-    "-=",
-    "*=",
-    "/=",
-    "%%=",
-};
-char seperators[] = {
-    '{',
-    '}',
-    '(',
-    ')',
-    ';',
-};
-char *literals[] = {
-    "true",
-    "false",
-    "NULL",
-};
-#pragma endregion
-
 Error *LexicalAnylsis(char *code, GeneralList *output)
 {
     Error *error = (Error *)malloc(sizeof(Error));
@@ -83,6 +44,20 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
                 tokenLength = strlen(keyword);
                 matchType = KEYWORD;
                 printf("KEYWORD len: %d\n", tokenLength);
+                goto allocateToken;
+            }
+        }
+        // Check for types
+        for (int i = 0; i < sizeof(typewords) / sizeof(typewords[0]); i++)
+        {
+            char *type = typewords[i];
+            if (strlen(sourceCode) - lexerIndex < strlen(type))
+                continue;
+            if (strncmp((&sourceCode[lexerIndex]), type, strlen(type)) == 0)
+            {
+                tokenLength = strlen(type);
+                matchType = TYPE;
+                printf("TYPE len: %d\n", tokenLength);
                 goto allocateToken;
             }
         }
