@@ -1,8 +1,9 @@
 #include "Common.h"
 #include "Lexer.h"
 #include "SyntaxAnalyzer.h"
+#include "SemanticAnalyzer.h"
 
-char *sourceCode = "if(a<0){a=5;}";
+char *sourceCode = "if(a<0){int a= 5+5;}";
 
 void InitializeClasses()
 {
@@ -24,7 +25,7 @@ int main()
     printf("Done\n");
     if (error->errorCode != NO_ERROR)
     {
-        printf("Error: %d\n", error->errorCode);
+        PrintError(error);
         free(error);
         goto stall;
     }
@@ -43,12 +44,23 @@ int main()
     printf("Done\n");
     if (error->errorCode != NO_ERROR)
     {
-        printf("Error: %d\n", error->errorCode);
+        PrintError(error);
         free(error);
         goto stall;
     }
     free(error);
 
+    error = SemanticAnalysis(tree);
+    printf("Done\n");
+    if (error->errorCode != NO_ERROR)
+    {
+        PrintError(error);
+        free(error);
+        goto stall;
+    }
+    free(error);
+
+stall:
     char message[32] = {'\0'};
     uint8_t messageIndex = 0;
     GeneralList navigation;
@@ -105,7 +117,6 @@ int main()
         }
     }
 
-stall:
     while (1)
     {
         sleep_ms(100);
