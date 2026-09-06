@@ -72,4 +72,10 @@ char *FormatError(Error *error)
             (int)error->line);
     return output;
 }
+void PrintError(Error *reference)
+{
+    char *message = FormatError(reference);
+    printf("Error %s\n", message);
+    free(message);
+}
 #endif
