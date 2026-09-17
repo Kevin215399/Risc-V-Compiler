@@ -2,29 +2,45 @@
 #define KEYWORDS_H
 
 char *keywords[] = {
-    "if",
+    "for",
     "while",
+    "if",
+    "else",
+    "break",
     "return",
+    "pinSet",
+    "pinFlip",
+    "pinMode",
+    "print",
+    "malloc",
+    "memset",
+    "memread",
+    "free"
 };
 
 // Also update...
 // enum IdentifierType (Common.h)
 // Must match IdentifierType's order, for ParseType()
 char *typewords[] = {
-    "int",
-    "float",
-    "char",
     "uint8_t",
     "uint16_t",
     "uint32_t",
+    "int8_t",
+    "int16_t",
+    "int",
+    "float",
+    
     "bool",
-    "char"};
+    "char",
+    "void"};
 char *operators[] = {
     "=",
     "<=",
     ">=",
     "<",
     ">",
+    "==",
+    "!=",
 
     "+",
     "-",
@@ -37,6 +53,12 @@ char *operators[] = {
     "*=",
     "/=",
     "%%=",
+    "^=",
+
+    "!",
+    "~",
+    "&",
+    "*"
 };
 char seperators[] = {
     '{',
@@ -44,6 +66,9 @@ char seperators[] = {
     '(',
     ')',
     ';',
+    '[',
+    ']',
+    ','
 };
 char *literals[] = {
     "true",

@@ -1,237 +1,7 @@
 #ifndef SYNTAX_ANALYZER_H
 #define SYNTAX_ANALYZER_H
 #include "Common.h"
-
-#pragma region CFG
-
-#define TERMINATORS 21
-#define NONTERMINATORS 18
-const char *NonTerms[] = {"IDENTIFIER", "TYPE", "LITERAL", "\0", "while", "if", "}", ")", ";", "(", "<", ">", "<=", ">=", "!=", "==", "+", "-", "*", "/", "="};
-#define BODY 0
-#define LINE 1
-#define DECLARATION 2
-#define DECREST 3
-#define WHILE 4
-#define IF 5
-#define ASSIGN 6
-#define EXPRESSION 7
-#define EQUALITY 8
-#define EQUALITYREST 9
-#define ADDITION 10
-#define ADDITIONREST 11
-#define MULTIPLY 12
-#define MULTIPLYREST 13
-#define ATOM 14
-#define TYPE_TERM 15
-#define IDENTIFIER_TERM 16
-#define LITERAL_TERM 17
-
-GeneralList grammarTable[NONTERMINATORS][TERMINATORS];
-#define TERM_OFFSET 128
-
-uint8_t GetTermIndex(char *term)
-{
-    uint8_t x = 255;
-    for (int i = 0; i < sizeof(NonTerms) / sizeof(NonTerms[0]); i++)
-    {
-        if (strcmp(NonTerms[i], term) == 0)
-        {
-            x = i;
-            break;
-        }
-    }
-    return x;
-}
-void AddTerm(char *term, uint8_t y, char *rule)
-{
-    uint8_t x = GetTermIndex(term);
-    if (x == 255)
-    {
-        printf("term index not found\n");
-        return;
-    }
-
-    PushCharArr(&grammarTable[y][x], rule);
-}
-void AddNonTerm(char *term, uint8_t y, uint8_t nonterm)
-{
-    uint8_t x = GetTermIndex(term);
-    if (x == 255)
-    {
-        printf("term index not found\n");
-        return;
-    }
-    PushByte(&grammarTable[y][x], nonterm);
-}
-void SetupCFG()
-{
-    for (int y = 0; y < NONTERMINATORS; y++)
-    {
-        for (int x = 0; x < TERMINATORS; x++)
-        {
-            InitializeList(&grammarTable[y][x]);
-        }
-    }
-    // Body
-    AddNonTerm("IDENTIFIER", BODY, TERM_OFFSET + LINE);
-    AddNonTerm("IDENTIFIER", BODY, TERM_OFFSET + BODY);
-    AddNonTerm("TYPE", BODY, TERM_OFFSET + LINE);
-    AddNonTerm("TYPE", BODY, TERM_OFFSET + BODY);
-    AddNonTerm("while", BODY, TERM_OFFSET + LINE);
-    AddNonTerm("while", BODY, TERM_OFFSET + BODY);
-    AddNonTerm("if", BODY, TERM_OFFSET + LINE);
-    AddNonTerm("if", BODY, TERM_OFFSET + BODY);
-    AddTerm("\0", BODY, "");
-    AddTerm("}", BODY, "");
-
-    // Line
-    AddTerm(")", LINE, "");
-    AddTerm(";", LINE, "");
-    AddTerm("}", LINE, "");
-    AddNonTerm("IDENTIFIER", LINE, TERM_OFFSET + ASSIGN);
-    AddNonTerm("TYPE", LINE, TERM_OFFSET + DECLARATION);
-    AddNonTerm("while", LINE, TERM_OFFSET + WHILE);
-    AddNonTerm("if", LINE, TERM_OFFSET + IF);
-
-    // Declaration
-    AddNonTerm("TYPE", DECLARATION, TERM_OFFSET + TYPE_TERM);
-    AddNonTerm("TYPE", DECLARATION, TERM_OFFSET + IDENTIFIER_TERM);
-    AddNonTerm("TYPE", DECLARATION, TERM_OFFSET + DECREST);
-
-    // Dec Rest
-    AddTerm(";", DECREST, ";");
-
-    AddTerm("(", DECREST, "(");
-    AddTerm("(", DECREST, ")");
-    AddTerm("(", DECREST, "{");
-    AddNonTerm("(", DECREST, TERM_OFFSET + BODY);
-    AddTerm("(", DECREST, "}");
-
-    AddTerm("=", DECREST, "=");
-    AddNonTerm("=", DECREST, TERM_OFFSET + EXPRESSION);
-    AddTerm("=", DECREST, ";");
-
-    // While
-    AddTerm("while", WHILE, "while");
-    AddTerm("while", WHILE, "(");
-    AddNonTerm("while", WHILE, TERM_OFFSET + EXPRESSION);
-    AddTerm("while", WHILE, ")");
-    AddTerm("while", WHILE, "{");
-    AddNonTerm("while", WHILE, TERM_OFFSET + BODY);
-    AddTerm("while", WHILE, "}");
-
-    // If
-    AddTerm("if", IF, "if");
-    AddTerm("if", IF, "(");
-    AddNonTerm("if", IF, TERM_OFFSET + EXPRESSION);
-    AddTerm("if", IF, ")");
-    AddTerm("if", IF, "{");
-    AddNonTerm("if", IF, TERM_OFFSET + BODY);
-    AddTerm("if", IF, "}");
-
-    // Assign
-    AddNonTerm("IDENTIFIER", ASSIGN, TERM_OFFSET + IDENTIFIER_TERM);
-    AddTerm("IDENTIFIER", ASSIGN, "=");
-    AddNonTerm("IDENTIFIER", ASSIGN, TERM_OFFSET + EXPRESSION);
-    AddTerm("IDENTIFIER", ASSIGN, ";");
-
-    // Expression
-    AddNonTerm("IDENTIFIER", EXPRESSION, TERM_OFFSET + EQUALITY);
-    AddNonTerm("LITERAL", EXPRESSION, TERM_OFFSET + EQUALITY);
-
-    // Equality
-    AddNonTerm("IDENTIFIER", EQUALITY, TERM_OFFSET + ADDITION);
-    AddNonTerm("IDENTIFIER", EQUALITY, TERM_OFFSET + EQUALITYREST);
-    AddNonTerm("LITERAL", EQUALITY, TERM_OFFSET + ADDITION);
-    AddNonTerm("LITERAL", EQUALITY, TERM_OFFSET + EQUALITYREST);
-
-    // Equality rest
-    AddTerm(")", EQUALITYREST, "");
-    AddTerm(";", EQUALITYREST, "");
-
-    AddTerm("<", EQUALITYREST, "<");
-    AddNonTerm("<", EQUALITYREST, TERM_OFFSET + ADDITION);
-    AddNonTerm("<", EQUALITYREST, TERM_OFFSET + EQUALITYREST);
-
-    AddTerm(">", EQUALITYREST, ">");
-    AddNonTerm(">", EQUALITYREST, TERM_OFFSET + ADDITION);
-    AddNonTerm(">", EQUALITYREST, TERM_OFFSET + EQUALITYREST);
-
-    AddTerm("<=", EQUALITYREST, "<=");
-    AddNonTerm("<=", EQUALITYREST, TERM_OFFSET + ADDITION);
-    AddNonTerm("<=", EQUALITYREST, TERM_OFFSET + EQUALITYREST);
-
-    AddTerm(">=", EQUALITYREST, ">=");
-    AddNonTerm(">=", EQUALITYREST, TERM_OFFSET + ADDITION);
-    AddNonTerm(">=", EQUALITYREST, TERM_OFFSET + EQUALITYREST);
-
-    AddTerm("!=", EQUALITYREST, "!=");
-    AddNonTerm("!=", EQUALITYREST, TERM_OFFSET + ADDITION);
-    AddNonTerm("!=", EQUALITYREST, TERM_OFFSET + EQUALITYREST);
-
-    AddTerm("==", EQUALITYREST, "==");
-    AddNonTerm("==", EQUALITYREST, TERM_OFFSET + ADDITION);
-    AddNonTerm("==", EQUALITYREST, TERM_OFFSET + EQUALITYREST);
-
-    // Addition
-    AddNonTerm("IDENTIFIER", ADDITION, TERM_OFFSET + MULTIPLY);
-    AddNonTerm("IDENTIFIER", ADDITION, TERM_OFFSET + ADDITIONREST);
-    AddNonTerm("LITERAL", ADDITION, TERM_OFFSET + MULTIPLY);
-    AddNonTerm("LITERAL", ADDITION, TERM_OFFSET + ADDITIONREST);
-
-    // Addition rest
-    AddTerm("<", ADDITIONREST, "");
-    AddTerm(">", ADDITIONREST, "");
-    AddTerm("<=", ADDITIONREST, "");
-    AddTerm(">=", ADDITIONREST, "");
-    AddTerm("!=", ADDITIONREST, "");
-    AddTerm("==", ADDITIONREST, "");
-
-    AddTerm(")", ADDITIONREST, "");
-    AddTerm(";", ADDITIONREST, "");
-
-    AddTerm("+", ADDITIONREST, "+");
-    AddNonTerm("+", ADDITIONREST, TERM_OFFSET + MULTIPLY);
-    AddNonTerm("+", ADDITIONREST, TERM_OFFSET + ADDITIONREST);
-
-    AddTerm("-", ADDITIONREST, "-");
-    AddNonTerm("-", ADDITIONREST, TERM_OFFSET + MULTIPLY);
-    AddNonTerm("-", ADDITIONREST, TERM_OFFSET + ADDITIONREST);
-
-    // Multiply
-    AddNonTerm("IDENTIFIER", MULTIPLY, TERM_OFFSET + ATOM);
-    AddNonTerm("IDENTIFIER", MULTIPLY, TERM_OFFSET + MULTIPLYREST);
-    AddNonTerm("LITERAL", MULTIPLY, TERM_OFFSET + ATOM);
-    AddNonTerm("LITERAL", MULTIPLY, TERM_OFFSET + MULTIPLYREST);
-
-    // Multiply rest
-    AddTerm("<", MULTIPLYREST, "");
-    AddTerm(">", MULTIPLYREST, "");
-    AddTerm("<=", MULTIPLYREST, "");
-    AddTerm(">=", MULTIPLYREST, "");
-    AddTerm("!=", MULTIPLYREST, "");
-    AddTerm("==", MULTIPLYREST, "");
-
-    AddTerm("+", MULTIPLYREST, "");
-    AddTerm("-", MULTIPLYREST, "");
-
-    AddTerm(")", MULTIPLYREST, "");
-    AddTerm(";", MULTIPLYREST, "");
-
-    AddTerm("*", MULTIPLYREST, "*");
-    AddNonTerm("*", MULTIPLYREST, TERM_OFFSET + MULTIPLY);
-    AddNonTerm("*", MULTIPLYREST, TERM_OFFSET + MULTIPLYREST);
-
-    AddTerm("/", MULTIPLYREST, "/");
-    AddNonTerm("/", MULTIPLYREST, TERM_OFFSET + MULTIPLY);
-    AddNonTerm("/", MULTIPLYREST, TERM_OFFSET + MULTIPLYREST);
-
-    // Atom
-    AddNonTerm("IDENTIFIER", ATOM, TERM_OFFSET + IDENTIFIER_TERM);
-    AddNonTerm("LITERAL", ATOM, TERM_OFFSET + LITERAL_TERM);
-}
-
-#pragma endregion
+#include "CFG.h"
 // Function is destructive to input tokens
 Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
 {
@@ -353,6 +123,7 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
             }
             else
             {
+                printf("finding match for %s\n", token->value);
                 matchingTerm = GetTermIndex(token->value);
                 if (token->type == IDENTIFIER)
                 {
@@ -363,11 +134,6 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
                 {
                     printf("Term is literal\n");
                     matchingTerm = GetTermIndex("LITERAL");
-                }
-                if (token->type == TYPE)
-                {
-                    printf("Term is type\n");
-                    matchingTerm = GetTermIndex("TYPE");
                 }
                 if (matchingTerm == 255)
                 {
@@ -380,11 +146,11 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
             }
 
             printf("Finding rule %d, %d\n", matchingTerm, (*top) - TERM_OFFSET);
-            GeneralList *rule = &grammarTable[(*top) - TERM_OFFSET][matchingTerm];
+            uint16_t ruleIndex = FindRuleInCFG(matchingTerm, (*top) - TERM_OFFSET);
 
-            if (rule->count == 0)
+            if (ruleIndex == (uint16_t)(-1))
             {
-                printf("ErrorC\n");
+                printf("ErrorC no matching rule\n");
                 for (int i = 0; i < tokens->count; i++)
                 {
                     printf("%s\n", ((Token *)ListGetIndex(tokens, i))->value);
@@ -394,11 +160,14 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
                 SetError(error, SYNTAX_ERROR, SYNTAX_ANALYZER, "Unexpected syntax", 0);
                 goto exit;
             }
+
+            GeneralList *rule = &(((GrammarRule *)ListGetIndex(&grammarTable, ruleIndex))->stack);
+
             free(PopList(&stack));
             for (int i = rule->count - 1; i >= 0; i--)
             {
                 char *newRule = (char *)ListGetIndex(rule, i);
-                printf("Push rule\n");
+                printf("Push rule %d\n", (int)(*newRule));
                 if ((*newRule) >= 128)
                 {
                     printf("%d\n", (*newRule) - TERM_OFFSET);
@@ -436,7 +205,7 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
     }
 
 exit:
-    printf("%d\n", (int)((TreeNode *)output->children.firstElement->content)->children.count);
+    // printf("%d\n", (int)((TreeNode *)output->children.firstElement->content)->children.count);
     return error;
 }
 

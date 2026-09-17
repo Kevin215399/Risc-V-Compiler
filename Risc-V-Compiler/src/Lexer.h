@@ -1,44 +1,8 @@
 #ifndef LEXER_H
 #define LEXER_H
 
-#pragma region KeywordLists
-char *keywords[] = {
-    "if",
-    "while",
-    "return",
-    "int"};
-char *operators[] = {
-    "=",
-    "<=",
-    ">=",
-    "<",
-    ">",
-
-    "+",
-    "-",
-    "*",
-    "/",
-    "%%",
-
-    "+=",
-    "-=",
-    "*=",
-    "/=",
-    "%%=",
-};
-char seperators[] = {
-    '{',
-    '}',
-    '(',
-    ')',
-    ';',
-};
-char *literals[] = {
-    "true",
-    "false",
-    "NULL",
-};
-#pragma endregion
+#include "Common.h"
+#include "Common/Keywords.h"
 
 Error *LexicalAnylsis(char *code, GeneralList *output)
 {
@@ -83,6 +47,20 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
                 tokenLength = strlen(keyword);
                 matchType = KEYWORD;
                 printf("KEYWORD len: %d\n", tokenLength);
+                goto allocateToken;
+            }
+        }
+        // Check for typewords
+        for (int i = 0; i < sizeof(typewords) / sizeof(typewords[0]); i++)
+        {
+            char *type = typewords[i];
+            if (strlen(sourceCode) - lexerIndex < strlen(type))
+                continue;
+            if (strncmp((&sourceCode[lexerIndex]), type, strlen(type)) == 0)
+            {
+                tokenLength = strlen(type);
+                matchType = TYPE;
+                printf("TYPE len: %d\n", tokenLength);
                 goto allocateToken;
             }
         }
@@ -151,7 +129,7 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
             goto allocateToken;
         }
         // Check for number literals
-        if (IsNumber(sourceCode[lexerIndex]))
+        if (IsNumber(sourceCode[lexerIndex]) || sourceCode[lexerIndex]=='.')
         {
             bool hasDecimal = false;
             bool hasNegative = false;

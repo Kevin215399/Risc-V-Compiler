@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <stdio.h>
 #include "math.h"
 #include "pico/stdlib.h"
@@ -12,12 +11,9 @@
 
 #include "ErrorFormatter.h"
 
-
 extern char *sourceCode;
 
 #pragma region Objects
-
-#pragma region LexerTokens
 
 typedef enum TokenType
 {
@@ -35,22 +31,31 @@ typedef struct Token
     TokenType type;
     char *value;
 } Token;
-#pragma endregion LexerTokens
 
-#pragma region Identifiers
+typedef enum FuncOrVar
+{
+    NEITHER,
+    FUNCTION,
+    VARIABLE,
+} FuncOrVar;
 
 // Also update...
 // Keywords.h
 // Must match keywords' order, for ParseType()
+// SemanticAnalyzer.h PromoteType()
 typedef enum IdentifierType
 {
+    UINT8_T,
+    UINT16_T,
+    UINT32_T,
+    INT8_T,
+    INT16_T,
     INT,
     FLOAT,
-    UINT8_T,
-    UINT16_T, 
-    UINT32_T,
+
     BOOL,
-    CHAR
+    CHAR,
+    VOID
 } IdentifierType;
 
 typedef struct Identifier
@@ -58,9 +63,9 @@ typedef struct Identifier
     IdentifierType type;
     char *name;
     uint8_t pointerDepth;
+    FuncOrVar funcOrVar;
+    GeneralList parameters;
 } Identifier;
-
-#pragma endregion Identifiers
 
 #pragma endregion
 

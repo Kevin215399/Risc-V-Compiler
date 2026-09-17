@@ -14,6 +14,10 @@ typedef enum ErrorCode
     UNEXPECTED_NULL,
     MALLOC_FAILURE,
     UNDEFINED,
+    AST_STRUCTURE,
+    TYPE_MISMATCH,
+    POINTERS,
+    DUPLICATE
 } ErrorCode;
 
 typedef enum Location
@@ -32,7 +36,7 @@ typedef struct Error
     char *message;
 } Error;
 
-const char *ERR_CODE_NAMES[] = {"Success", "Syntax Error", "Unexpected Null", "Undefined value"};
+const char *ERR_CODE_NAMES[] = {"Success", "Syntax Error", "Unexpected Null", "Malloc failure :( bad bad bad", "Undefined value", "AST Structure", "Type mismatch", "Pointer ettiquite", "Duplicate symbol"};
 const char *ERR_LOC_NAMES[] = {"OTHER", "LEXER", "SYNTAX ANALYZER", "SEMANTIC ANALYZER"};
 
 void SetError(Error *reference, ErrorCode error, Location location, char *message, uint16_t line)
@@ -71,5 +75,10 @@ char *FormatError(Error *error)
             error->message,
             (int)error->line);
     return output;
+}
+void PrintError(Error* error){
+    char* message = FormatError(error);
+    printf("%s\n",message);
+    free(message);
 }
 #endif
