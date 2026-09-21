@@ -7,26 +7,26 @@
 
 typedef struct GeneralListNode
 {
-    struct GeneralListNode* next;
-    struct GeneralListNode* previous;
-    void* content;
+    struct GeneralListNode *next;
+    struct GeneralListNode *previous;
+    void *content;
 } GeneralListNode;
 
 typedef struct GeneralList
 {
-    GeneralListNode* firstElement;
-    GeneralListNode* lastElement;
+    GeneralListNode *firstElement;
+    GeneralListNode *lastElement;
     int count;
 } GeneralList;
 
-void InitializeList(GeneralList* list)
+void InitializeList(GeneralList *list)
 {
     list->count = 0;
     list->firstElement = NULL;
     list->lastElement = NULL;
 }
 
-void PushList(GeneralList* list, void* content)
+void PushList(GeneralList *list, void *content)
 {
     // printf("list passed\n");
     if (list == NULL)
@@ -37,7 +37,7 @@ void PushList(GeneralList* list, void* content)
     if (list->lastElement == NULL)
     {
         // printf("createing first\n");
-        list->firstElement = (GeneralListNode*)malloc(sizeof(GeneralListNode));
+        list->firstElement = (GeneralListNode *)malloc(sizeof(GeneralListNode));
         // printf("createing malloced\n");
         list->lastElement = list->firstElement;
         list->lastElement->next = NULL;
@@ -47,7 +47,7 @@ void PushList(GeneralList* list, void* content)
     }
     else
     {
-        GeneralListNode* newElement = (GeneralListNode*)malloc(sizeof(GeneralListNode));
+        GeneralListNode *newElement = (GeneralListNode *)malloc(sizeof(GeneralListNode));
         list->lastElement->next = newElement;
         newElement->previous = list->lastElement;
         newElement->next = NULL;
@@ -58,20 +58,21 @@ void PushList(GeneralList* list, void* content)
 
     list->lastElement->content = content;
 }
-void* PeekList(GeneralList* list){
-    if (list->count == 0)
-        return NULL;
-
-    void* content = list->lastElement->content;
-    return content;
-}
-
-void* PopList(GeneralList* list)
+void *PeekList(GeneralList *list)
 {
     if (list->count == 0)
         return NULL;
 
-    void* content = list->lastElement->content;
+    void *content = list->lastElement->content;
+    return content;
+}
+
+void *PopList(GeneralList *list)
+{
+    if (list->count == 0)
+        return NULL;
+
+    void *content = list->lastElement->content;
     // printf("got content\n");
 
     if (list->count > 1)
@@ -92,12 +93,12 @@ void* PopList(GeneralList* list)
     return content;
 }
 
-void* PopListFirst(GeneralList* list)
+void *PopListFirst(GeneralList *list)
 {
     if (list->count == 0)
         return NULL;
 
-    void* content = list->firstElement->content;
+    void *content = list->firstElement->content;
     // printf("got content\n");
 
     if (list->count > 1)
@@ -118,7 +119,7 @@ void* PopListFirst(GeneralList* list)
     return content;
 }
 
-void* ListGetIndex(GeneralList* list, int index)
+void *ListGetIndex(GeneralList *list, int index)
 {
     if (index >= list->count)
     {
@@ -126,7 +127,7 @@ void* ListGetIndex(GeneralList* list, int index)
         return NULL;
     }
 
-    GeneralListNode* currentNode = list->firstElement;
+    GeneralListNode *currentNode = list->firstElement;
     // printf("ggot\n");
     for (int i = 0; i < index; i++)
     {
@@ -137,7 +138,7 @@ void* ListGetIndex(GeneralList* list, int index)
     return currentNode->content;
 }
 
-void* DeleteListElement(GeneralList* list, int index)
+void *DeleteListElement(GeneralList *list, int index)
 {
     if (index >= list->count)
     {
@@ -145,7 +146,7 @@ void* DeleteListElement(GeneralList* list, int index)
         return NULL;
     }
 
-    GeneralListNode* currentNode = list->firstElement;
+    GeneralListNode *currentNode = list->firstElement;
     // printf("ggot\n");
     for (int i = 0; i < index; i++)
     {
@@ -175,14 +176,15 @@ void* DeleteListElement(GeneralList* list, int index)
         currentNode->next->previous = NULL;
         list->firstElement = currentNode->next;
     }
-    else {
+    else
+    {
         list->firstElement = NULL;
         list->lastElement = NULL;
     }
 
     // printf("stitched list\n");
 
-    void* content = currentNode->content;
+    void *content = currentNode->content;
 
     free(currentNode);
 
@@ -190,8 +192,7 @@ void* DeleteListElement(GeneralList* list, int index)
     return content;
 }
 
-
-void TransferList(GeneralList* to, GeneralList* from)
+void TransferList(GeneralList *to, GeneralList *from)
 {
     while (from->count > 0)
     {
@@ -199,24 +200,78 @@ void TransferList(GeneralList* to, GeneralList* from)
         PushList(to, DeleteListElement(from, 0));
     }
 }
-void CpyList(GeneralList* to, GeneralList* from, size_t contentSize)
+
+void CpyList(GeneralList *to, GeneralList *from, size_t contentSize)
 {
     for (int i = 0; i < from->count; i++)
     {
 
-        void* valueToCopy = ListGetIndex(from, i);
-        void* cpy = malloc(contentSize);
+        void *valueToCopy = ListGetIndex(from, i);
+        void *cpy = malloc(contentSize);
         memcpy(cpy, valueToCopy, contentSize);
 
         PushList(to, cpy);
     }
     to->count += from->count;
 }
-void EmptyList(GeneralList* list){
-    while(list->count > 0){
+
+void EmptyList(GeneralList *list)
+{
+    while (list->count > 0)
+    {
         free(PopList(list));
     }
 }
 
+void ListInsert(GeneralList *list, uint16_t index, void *content)
+{
+    // printf("list passed\n");
+    if (list == NULL)
+    {
+        printf("list is null\n");
+        return;
+    }
+    if (index >= list->count)
+    {
+        printf("out of bounds\n");
+        return;
+    }
+
+    if (list->lastElement == NULL)
+    {
+        // printf("createing first\n");
+        list->firstElement = (GeneralListNode *)malloc(sizeof(GeneralListNode));
+        list->lastElement = list->firstElement;
+        list->lastElement->next = NULL;
+        list->lastElement->previous = NULL;
+        list->lastElement->content = content;
+        list->count = 1;
+    }
+    else
+    {
+        GeneralListNode *currentNode = list->firstElement;
+        for (int i = 0; i < index; i++)
+        {
+            currentNode = currentNode->next;
+        }
+
+        GeneralListNode *newElement = (GeneralListNode *)malloc(sizeof(GeneralListNode));
+        newElement->content = content;
+        if (currentNode->next == NULL)
+        {
+            newElement->next = NULL;
+        }
+        else
+        {
+            newElement->next = currentNode->next;
+            currentNode->next->previous = newElement;
+        }
+        currentNode->next = newElement;
+        newElement->previous = currentNode;
+
+        list->lastElement = newElement;
+        list->count++;
+    }
+}
 
 #endif

@@ -2,7 +2,9 @@
 #include "Lexer.h"
 #include "SyntaxAnalyzer.h"
 #include "SemanticAnalyzer.h"
-char *sourceCode = "void main(){char c; c = 5;}";
+#include "ASMGenerator.h"
+#include "SpecialParser.h"
+char *sourceCode = "3+2+4";
 
 void InitializeClasses()
 {
@@ -16,38 +18,53 @@ int main()
     printf("start");
 
     InitializeClasses();
+    GeneralList tokens;
+    InitializeList(&tokens);
 
-    GeneralList *tokens = (GeneralList *)malloc(sizeof(GeneralList));
-    InitializeList(tokens);
-
-    Error *error = LexicalAnylsis(sourceCode, tokens);
+    Error *error = LexicalAnylsis(sourceCode, &tokens);
     printf("Done\n");
     if (error->errorCode != NO_ERROR)
     {
         PrintError(error);
         free(error);
-        goto stall;
+        goto inspect;
     }
     free(error);
-
-    for (int i = 0; i < tokens->count; i++)
+    for (int i = 0; i < tokens.count; i++)
     {
-        Token *token = (Token *)ListGetIndex(tokens, i);
+        Token *token = (Token *)ListGetIndex(&tokens, i);
         printf("Token: %d, %s\n", token->type, token->value);
     }
     sleep_ms(300);
+    
+
+    GeneralList parsedOut;
+    InitializeList(&parsedOut);
+    ShuntYard(&tokens, &parsedOut);
+    printf("done\n");
+    for (int i = 0; i < parsedOut.count; i++)
+    {
+        printf("%s\n", ((Token *)ListGetIndex(&parsedOut, i))->value);
+    }
+    goto exit;
+
+    
 
     TreeNode *tree = (TreeNode *)malloc(sizeof(TreeNode));
     InitializeTree(tree);
-    error = AnalyzeSyntax(tokens, tree);
+    error = AnalyzeSyntax(&tokens, tree);
     printf("Done\n");
     if (error->errorCode != NO_ERROR)
     {
         PrintError(error);
         free(error);
-        goto stall;
+        goto inspect;
     }
     free(error);
+
+    GeneralList *asmList = malloc(sizeof(GeneralList));
+    InitializeList(asmList);
+    SetASMDestination(asmList);
 
     error = SemanticAnylsis(tree);
     printf("Done\n");
@@ -55,11 +72,13 @@ int main()
     {
         PrintError(error);
         free(error);
-        goto stall;
+        goto inspect;
     }
     free(error);
 
-stall:
+    PrintASMProgram();
+
+inspect:
     char message[32] = {'\0'};
     uint8_t messageIndex = 0;
     GeneralList navigation;
@@ -115,7 +134,7 @@ stall:
             message[messageIndex++] = c;
         }
     }
-
+exit:
     while (1)
     {
         sleep_ms(100);

@@ -40,6 +40,22 @@ TreeNode *TreeGetNode(TreeNode *root, GeneralList *navMap)
     // printf("navigate sucess\n");
     return currentNode;
 }
+TreeNode* TreeGetNodeConstant(TreeNode*root, uint8_t *navMap, uint8_t listLength){
+    TreeNode *currentNode = root;
+    for (int i = 0; i < listLength; i++)
+    {
+        uint8_t child = navMap[i];
+        if (child >= currentNode->children.count)
+        {
+            printf("navigate fail\n");
+            printf("only has %d children\n", currentNode->children.count);
+            return NULL;
+        }
+        currentNode = (TreeNode *)ListGetIndex(&currentNode->children, child);
+    }
+    return currentNode;
+
+}
 TreeNode *TreeGetNodeLimited(TreeNode *root, GeneralList *navMap, uint8_t maxInstructions)
 {
     TreeNode *currentNode = root;

@@ -3,6 +3,7 @@
 
 #include "Common.h"
 #include "SyntaxAnalyzer.h"
+#include "ASMGenerator.h"
 
 typedef struct TypeMarker
 {
@@ -77,6 +78,73 @@ Identifier *FindSymbol(GeneralList *variableStack, char *symbol)
     }
     return NULL;
 }
+// Determines the current index of a node in relation to its siblings
+uint8_t GetIndexFromSiblings(TreeNode *self)
+{
+    TreeNode *parent = self->parent;
+    for (int i = 0; i < parent->children.count; i++)
+    {
+        TreeNode *checkSibling = (TreeNode *)ListGetIndex(&parent->children, i);
+        if (checkSibling == self)
+        {
+            return i;
+        }
+    }
+    return 0;
+}
+
+void BacktrackTypeCheck(GeneralList *mathStack, uint8_t *nextReg, Error *error, GeneralList *typeMarkers, TreeNode *currentNode);
+void LeftMath(GeneralList *mathStack, uint8_t *nextReg, Error *error, GeneralList *typeMarkers, TreeNode *currentNode);
+
+Identifier *DeclareVariable(Error *error, GeneralList *variableStack, TreeNode *currentNode, bool forceVariable)
+{
+
+    TreeNode *typeNode = (TreeNode *)ListGetIndex(&currentNode->children, 4);
+    typeNode = (TreeNode *)ListGetIndex(&typeNode->children, 0);
+
+    TreeNode *nameNode = (TreeNode *)ListGetIndex(&currentNode->children, 2);
+    nameNode = (TreeNode *)ListGetIndex(&nameNode->children, 0);
+
+    if (FindSymbol(variableStack, (char *)nameNode->content) != NULL)
+    {
+        SetError(error, DUPLICATE, SEMANTIC_ANALYZER, "Symbol was already defined earlier", 0);
+        return NULL;
+    }
+
+    Identifier *newVar = (Identifier *)malloc(sizeof(Identifier));
+
+    newVar->name = malloc(strlen((char *)nameNode->content) + 1);
+    strcpy(newVar->name, (char *)nameNode->content);
+
+    newVar->type = ParseType((char *)typeNode->content);
+
+    TreeNode *pointerNode = (TreeNode *)ListGetIndex(&currentNode->children, 3);
+
+    newVar->pointerDepth = GetPointerDepth(pointerNode);
+
+    if (forceVariable)
+    {
+        newVar->funcOrVar = VARIABLE;
+    }
+    else
+    {
+        TreeNode *decrest = (TreeNode *)ListGetIndex(&currentNode->children, 0);
+        TreeNode *funcOrVar = (TreeNode *)PeekList(&decrest->children);
+        if (*((uint8_t *)funcOrVar->content) == FUNC_DEC_REST)
+        {
+            newVar->funcOrVar = FUNCTION;
+            InitializeList(&newVar->parameters);
+        }
+        else
+        {
+            newVar->funcOrVar = VARIABLE;
+        }
+    }
+
+    PushList(variableStack, newVar);
+    printf("pushed %s to symbol table\n", newVar->name);
+    return newVar;
+}
 
 Error *SemanticAnylsis(TreeNode *AST)
 {
@@ -84,6 +152,12 @@ Error *SemanticAnylsis(TreeNode *AST)
     Error *error = (Error *)malloc(sizeof(Error));
     memset(error, 0, sizeof(Error));
     error->errorCode = NO_ERROR;
+
+    if (AST == NULL)
+    {
+        SetError(error, UNEXPECTED_NULL, SEMANTIC_ANALYZER, "Missing AST reference", 0);
+        goto exit;
+    }
 
     GeneralList exploreMap;
     InitializeList(&exploreMap);
@@ -97,11 +171,9 @@ Error *SemanticAnylsis(TreeNode *AST)
     GeneralList typeMarkers;
     InitializeList(&typeMarkers);
 
-    if (AST == NULL)
-    {
-        SetError(error, UNEXPECTED_NULL, SEMANTIC_ANALYZER, "Missing AST reference", 0);
-        goto exit;
-    }
+    GeneralList mathStack;
+    InitializeList(&mathStack);
+    uint8_t nextReg = 0;
 
     TreeNode *currentNode = AST;
 
@@ -240,7 +312,6 @@ Error *SemanticAnylsis(TreeNode *AST)
                     }
                 }
             }
-
             if (termValue == TYPE_TERM)
             {
                 TreeNode *node = (TreeNode *)PeekList(&currentNode->children);
@@ -261,76 +332,43 @@ Error *SemanticAnylsis(TreeNode *AST)
         }
         if (*((uint8_t *)value) == TERM_OFFSET + DECLERATION)
         {
-            TreeNode *typeNode = (TreeNode *)ListGetIndex(&currentNode->children, 4);
-            typeNode = (TreeNode *)ListGetIndex(&typeNode->children, 0);
-
-            TreeNode *nameNode = (TreeNode *)ListGetIndex(&currentNode->children, 2);
-            nameNode = (TreeNode *)ListGetIndex(&nameNode->children, 0);
-
-            if (FindSymbol(&variableStack, (char *)nameNode->content) != NULL)
-            {
-                SetError(error, DUPLICATE, SEMANTIC_ANALYZER, "Symbol was already defined earlier", 0);
+            Identifier *variable = DeclareVariable(error, &variableStack, currentNode, false);
+            if(variable==NULL){
                 goto exit;
             }
-
-            Identifier *newVar = (Identifier *)malloc(sizeof(Identifier));
-
-            newVar->name = malloc(strlen((char *)nameNode->content) + 1);
-            strcpy(newVar->name, (char *)nameNode->content);
-
-            newVar->type = ParseType((char *)typeNode->content);
-
-            TreeNode *pointerNode = (TreeNode *)ListGetIndex(&currentNode->children, 3);
-
-            newVar->pointerDepth = GetPointerDepth(pointerNode);
-
-            TreeNode *decrest = (TreeNode *)ListGetIndex(&currentNode->children, 0);
-            TreeNode *funcOrVar = (TreeNode *)PeekList(&decrest->children);
-            if (*((uint8_t *)funcOrVar->content) == FUNC_DEC_REST)
-            {
-                newVar->funcOrVar = FUNCTION;
-            }
-            else
-            {
-                newVar->funcOrVar = VARIABLE;
-            }
-
-            PushList(&variableStack, newVar);
-            printf("pushed %s to symbol table\n", newVar->name);
         }
         if (*((uint8_t *)value) == TERM_OFFSET + FUNCTION_PARAMS)
         {
             if (currentNode->children.count == 5)
             {
-                TreeNode *typeNode = (TreeNode *)ListGetIndex(&currentNode->children, 4);
-                typeNode = (TreeNode *)ListGetIndex(&typeNode->children, 0);
-
-                TreeNode *nameNode = (TreeNode *)ListGetIndex(&currentNode->children, 2);
-                nameNode = (TreeNode *)ListGetIndex(&nameNode->children, 0);
-
-                if (FindSymbol(&variableStack, (char *)nameNode->content) != NULL)
+                // find parent to add to their parameters
+                TreeNode *parent = currentNode;
+                while (currentNode->parent != NULL)
                 {
-                    SetError(error, DUPLICATE, SEMANTIC_ANALYZER, "Symbol was already defined earlier", 0);
+                    parent = parent->parent;
+                }
+                if (parent == NULL)
+                {
+                    SetError(error, SYNTAX_ERROR, SEMANTIC_ANALYZER, "How did you do this? This parameter has no parent function?!", 0);
                     goto exit;
                 }
-
-                Identifier *newVar = (Identifier *)malloc(sizeof(Identifier));
-
-                newVar->name = malloc(strlen((char *)nameNode->content) + 1);
-                strcpy(newVar->name, (char *)nameNode->content);
-
-                newVar->type = ParseType((char *)typeNode->content);
-
-                TreeNode *pointerNode = (TreeNode *)ListGetIndex(&currentNode->children, 3);
-
-                newVar->pointerDepth = GetPointerDepth(pointerNode);
-
-                newVar->funcOrVar = VARIABLE;
-
-                PushList(&variableStack, newVar);
-                printf("pushed %s to symbol table\n", newVar->name);
+                Identifier *parentFunciton = FindSymbol(&variableStack, (char *)parent->content);
+                if (parentFunciton == NULL)
+                {
+                    SetError(error, SYNTAX_ERROR, SEMANTIC_ANALYZER, "How did you do this? This parameter has no parent function?!", 0);
+                    goto exit;
+                }
+                printf("Found parent function, pushing param\n");
+                Identifier *variable = DeclareVariable(error, &variableStack, currentNode, true);
+                if (variable == NULL)
+                {
+                    goto exit;
+                }
+                PushList(&parentFunciton->parameters, variable);
             }
         }
+
+        // LeftMath(&mathStack, &nextReg, error, &typeMarkers, currentNode);
 
         if (currentNode->children.count == 0)
         {
@@ -351,312 +389,8 @@ Error *SemanticAnylsis(TreeNode *AST)
                     goto exit;
                 }
                 topValue = (uint8_t *)PeekList(&exploreMap);
-                // "drag" types upwards if they exisSt
-                uint8_t term = (*((uint8_t *)currentNode->content) - TERM_OFFSET);
-                printf("%d\n", term);
-                if (term == ATOM)
-                {
-                    printf("backtracked to atom, checking children\n");
-                    TreeNode *child = (TreeNode *)ListGetIndex(&currentNode->children, 0);
-                    CopyMarker(&typeMarkers, currentNode, child);
-                }
-                else if (term == EQUALITY)
-                {
-                    printf("backtracked to EQUALITY, checking children\n");
-                    goto operatorCopy;
-                }
-                else if (term == ADDITION)
-                {
-                    printf("backtracked to ADDITION, checking children\n");
-                    goto operatorCopy;
-                }
-                else if (term == MULTIPLY)
-                {
-                    printf("backtracked to MULTIPLY, checking children\n");
-                    goto operatorCopy;
-                }
-                else if (term == EQUALITYREST)
-                {
-                    printf("backtracked to EQUALITYREST, checking children\n");
-                    goto operatorCopy;
-                }
-                else if (term == ADDITIONREST)
-                {
-                    printf("backtracked to ADDITIONREST, checking children\n");
-                    goto operatorCopy;
-                }
-                else if (term == MULTIPLYREST)
-                {
-                    printf("backtracked to MULTIPLYREST, checking children\n");
-                operatorCopy:
-                    if (currentNode->children.count >= 2)
-                    {
-                        TreeNode *first = (TreeNode *)ListGetIndex(&currentNode->children, 0);
-                        TreeNode *last = (TreeNode *)ListGetIndex(&currentNode->children, 1);
-                        TypeMarker *firstMarker = ReadMarkerOnNode(&typeMarkers, first);
-                        TypeMarker *lastMarker = ReadMarkerOnNode(&typeMarkers, last);
-                        if (firstMarker == NULL && lastMarker != NULL)
-                        {
-                            CopyMarker(&typeMarkers, currentNode, last);
-                            printf("operation is epsilon, dragging\n");
-                        }
-                        else if (firstMarker != NULL &&
-                                 lastMarker != NULL &&
-                                 firstMarker->type == lastMarker->type &&
-                                 firstMarker->pointerDepth == 0 &&
-                                 lastMarker->pointerDepth == 0 &&
-                                 firstMarker->funcOrVar != FUNCTION &&
-                                 lastMarker->funcOrVar != FUNCTION)
-                        {
-                            CopyMarker(&typeMarkers, currentNode, last);
-                            printf("operation valid, dragging\n");
-                        }
-                        else
-                        {
-                            printf("operation invalid\n");
-                            SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Incompatible types", 0);
-                            goto exit;
-                        }
-                    }
-                }
-                else if (term == ASSIGN)
-                {
-                    printf("Validating assignment\n");
-                    TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
-                    TreeNode *destination = (TreeNode *)ListGetIndex(&currentNode->children, 1);
-                    if (*((uint8_t *)source->children.firstElement->content) == FUNC_DEC_REST + TERM_OFFSET)
-                    {
-                        // It is actually a function call
-                        //  do nothing
-                    }
-                    else
-                    {
-                        TypeMarker *sourceType = ReadMarkerOnNode(&typeMarkers, source);
-                        TypeMarker *destinationType = ReadMarkerOnNode(&typeMarkers, destination);
-                        if (sourceType == NULL ||
-                            destinationType == NULL ||
-                            sourceType->funcOrVar == FUNCTION ||
-                            destinationType->funcOrVar == FUNCTION ||
-                            sourceType->pointerDepth != destinationType->pointerDepth ||
-                            sourceType->type != destinationType->type)
-                        {
-                            printf("assignment invalid\n");
-                            SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Incompatible types", 0);
-                            goto exit;
-                        }
-                    }
-                }
-                else if (term == ASSIGN_REST)
-                {
-                    printf("backtracked to ASSIGN_REST, checking children\n");
-                    TreeNode *operation = (TreeNode *)ListGetIndex(&currentNode->children, 1);
-                    TreeNode *child = (TreeNode *)ListGetIndex(&currentNode->children, 0);
-                    if (*((uint8_t *)operation->content) != '=')
-                    {
-                        TypeMarker *type = ReadMarkerOnNode(&typeMarkers, child);
-                        if (type->type > FLOAT || type->pointerDepth > 0)
-                        {
-                            printf("assign_rest invalid\n");
-                            SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Incompatible types", 0);
-                            goto exit;
-                        }
-                    }
-                    CopyMarker(&typeMarkers, currentNode, child);
-                }
-                else if (term == EXPRESSION)
-                {
-                    printf("backtracked to EXPRSSION, checking children\n");
-                    TreeNode *child = (TreeNode *)PeekList(&currentNode->children);
-                    TypeMarker *childMarker = ReadMarkerOnNode(&typeMarkers, child);
-                    if (childMarker == NULL)
-                    {
-                        printf("expression invalid\n");
-                        SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Expression is empty", 0);
-                        goto exit;
-                    }
-                    CopyMarker(&typeMarkers, currentNode, child);
-                }
-                else if (term == UNARY_ATOM)
-                {
-                    printf("unary backtrack\n");
-                    TreeNode *lastChild = (TreeNode *)PeekList(&currentNode->children);
-                    uint8_t *first = (uint8_t *)lastChild->content;
-                    if /*atom Drag*/ (*first == ATOM + TERM_OFFSET)
-                    {
-                        // Only has child of type atom
-                        printf("atom drag\n");
-                        CopyMarker(&typeMarkers, currentNode, lastChild);
-                    }
-                    if /*cast unary*/ (*first == '(')
-                    {
-                        // Only has child of type atom
-                        printf("cast drag\n");
-                        TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
-                        CopyMarker(&typeMarkers, currentNode, source);
-                    }
-                    if /*reference*/ (*first == '&')
-                    {
-                        printf("Ampersand\n");
 
-                        TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
-                        TypeMarker *originalMarker = ReadMarkerOnNode(&typeMarkers, source);
-                        if (originalMarker != NULL)
-                        {
-                            if (originalMarker->funcOrVar != VARIABLE)
-                            {
-                                SetError(error, POINTERS, SEMANTIC_ANALYZER, "\"&\" must be used on variables", 0);
-                                goto exit;
-                            }
-                            if (originalMarker->pointerDepth == NULL_DEPTH)
-                            {
-                                SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot reference a NULL value", 0);
-                                goto exit;
-                            }
-                            printf("referencing, %d, %d, %d\n", (int)originalMarker->type, (int)originalMarker->pointerDepth, originalMarker->funcOrVar);
-                            // Copy the marker
-                            AddTypeMarker(&typeMarkers, currentNode, originalMarker->type, originalMarker->pointerDepth + 1, NEITHER);
-                            printf("Copied marker from child\n");
-                        }
-                        else
-                        {
-                            printf("nothing to reference\n");
-                        }
-                    }
-                    if /*dereference*/ (*first == '*')
-                    {
-                        printf("dereference\n");
-
-                        TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
-                        TypeMarker *originalMarker = ReadMarkerOnNode(&typeMarkers, source);
-                        if (originalMarker != NULL)
-                        {
-                            if (originalMarker->pointerDepth == 0)
-                            {
-                                SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot dereference a non-pointer", 0);
-                                goto exit;
-                            }
-                            if (originalMarker->pointerDepth == NULL_DEPTH)
-                            {
-                                SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot dereference a NULL value", 0);
-                                goto exit;
-                            }
-
-                            if (originalMarker->funcOrVar == FUNCTION)
-                            {
-                                SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot dereference a function", 0);
-                                goto exit;
-                            }
-                            // Copy the marker
-                            AddTypeMarker(&typeMarkers, currentNode, originalMarker->type, originalMarker->pointerDepth - 1, NEITHER);
-                            printf("Copied marker from child\n");
-                        }
-                    }
-                    if /*Not*/ (*first == '!')
-                    {
-                        printf("Not\n");
-
-                        TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
-                        TypeMarker *originalMarker = ReadMarkerOnNode(&typeMarkers, source);
-                        if (originalMarker != NULL)
-                        {
-                            if (originalMarker->funcOrVar == FUNCTION)
-                            {
-                                SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot not a function", 0);
-                                goto exit;
-                            }
-                            if (originalMarker->pointerDepth > 0)
-                            {
-                                SetError(error, POINTERS, SEMANTIC_ANALYZER, "Not can not be used on pointers, derefence first", 0);
-                                goto exit;
-                            }
-                            if (originalMarker->type != BOOL)
-                            {
-                                SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Not cannot be used on types that are not bool. Use \"~\" for integers", 0);
-                                goto exit;
-                            }
-
-                            // Copy the marker
-                            AddTypeMarker(&typeMarkers, currentNode, originalMarker->type, originalMarker->pointerDepth, NEITHER);
-                            printf("Copied marker from child\n");
-                        }
-                    }
-                    if /*Unary Subtract*/ (*first == '-')
-                    {
-                        printf("Unary Subtract\n");
-
-                        TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
-                        TypeMarker *originalMarker = ReadMarkerOnNode(&typeMarkers, source);
-                        if (originalMarker != NULL)
-                        {
-                            if (originalMarker->funcOrVar == FUNCTION)
-                            {
-                                SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot unary subtract a function", 0);
-                                goto exit;
-                            }
-                            if (originalMarker->pointerDepth > 0)
-                            {
-                                SetError(error, POINTERS, SEMANTIC_ANALYZER, "Unary subtraction can not be used on pointers, derefence first", 0);
-                                goto exit;
-                            }
-                            if (originalMarker->type == BOOL || originalMarker->type == CHAR || originalMarker->type == VOID)
-                            {
-                                SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Unary subtraction can not be used on non-integer types", 0);
-                                goto exit;
-                            }
-                            // Copy the marker
-                            AddTypeMarker(&typeMarkers, currentNode, originalMarker->type, originalMarker->pointerDepth, NEITHER);
-                            printf("Copied marker from child\n");
-                        }
-                    }
-                    if /*negate*/ (*first == '~')
-                    {
-                        printf("negate\n");
-
-                        TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
-                        TypeMarker *originalMarker = ReadMarkerOnNode(&typeMarkers, source);
-                        if (originalMarker != NULL)
-                        {
-                            if (originalMarker->funcOrVar == FUNCTION)
-                            {
-                                SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot negate a function", 0);
-                                goto exit;
-                            }
-                            if (originalMarker->pointerDepth > 0)
-                            {
-                                SetError(error, POINTERS, SEMANTIC_ANALYZER, "Negate can not be used on pointers, derefence first", 0);
-                                goto exit;
-                            }
-                            if (originalMarker->type == BOOL || originalMarker->type == CHAR || originalMarker->type == VOID)
-                            {
-                                SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Negate can not be used on non-integer types", 0);
-                                goto exit;
-                            }
-                            // Copy the marker
-                            AddTypeMarker(&typeMarkers, currentNode, originalMarker->type, originalMarker->pointerDepth, NEITHER);
-                            printf("Copied marker from child\n");
-                        }
-                    }
-                }
-                if (term == CAST_OR_EXPR)
-                {
-                    printf("reached cast/expr\n");
-
-                    TreeNode *lastChild = (TreeNode *)PeekList(&currentNode->children);
-                    uint8_t *first = (uint8_t *)lastChild->content;
-
-                    if /*Type cast*/ (*first == TYPE_TERM + TERM_OFFSET)
-                    {
-                        printf("Type cast\n");
-                        TreeNode *castType = (TreeNode *)ListGetIndex(&currentNode->children, 3);
-                        CopyMarker(&typeMarkers, currentNode, castType);
-                    }
-                    if /*Parenthesis expression*/ (*first == EXPRESSION + TERM_OFFSET)
-                    {
-                        printf("Parenthesis expression\n");
-                        TreeNode *expression = (TreeNode *)ListGetIndex(&currentNode->children, 1);
-                        CopyMarker(&typeMarkers, currentNode, expression);
-                    }
-                }
+                BacktrackTypeCheck(&mathStack, &nextReg, error, &typeMarkers, currentNode);
             }
 
             (*topValue)--;
@@ -674,4 +408,407 @@ exit:
     return error;
 }
 
+/*
+//////////////////////////////////////////////////////////
+
+    BACKTRACK TYPE CHECK
+
+    Whenever tree backtracks to a node, check to see if it
+    should derive a type from its children
+
+//////////////////////////////////////////////////////////
+*/
+
+void BacktrackTypeCheck(GeneralList *mathStack, uint8_t *nextReg, Error *error, GeneralList *typeMarkers, TreeNode *currentNode)
+{
+
+    // "drag" types upwards if they exisSt
+    uint8_t term = (*((uint8_t *)currentNode->content) - TERM_OFFSET);
+    printf("%d\n", term);
+    switch (term)
+    {
+
+    case ATOM:
+    {
+        printf("backtracked to atom, checking children\n");
+        TreeNode *child = (TreeNode *)ListGetIndex(&currentNode->children, 0);
+        CopyMarker(typeMarkers, currentNode, child);
+    }
+    break;
+
+    case EQUALITY:
+    case ADDITION:
+    case MULTIPLY:
+    case EQUALITYREST:
+    case ADDITIONREST:
+    case MULTIPLYREST:
+    {
+        printf("backtracked to math %d, checking children\n", term);
+
+        if (currentNode->children.count >= 2)
+        {
+            TreeNode *first = (TreeNode *)ListGetIndex(&currentNode->children, 0);
+            TreeNode *last = (TreeNode *)ListGetIndex(&currentNode->children, 1);
+            if (last == NULL)
+            {
+                printf("apparently this node doesn't have 2 children\n");
+            }
+            TypeMarker *firstMarker = ReadMarkerOnNode(typeMarkers, first);
+            TypeMarker *lastMarker = ReadMarkerOnNode(typeMarkers, last);
+            if (firstMarker == NULL && lastMarker != NULL)
+            {
+                printf("operation is epsilon, dragging\n");
+                CopyMarker(typeMarkers, currentNode, last);
+            }
+            else if (firstMarker != NULL &&
+                     lastMarker != NULL &&
+                     firstMarker->type == lastMarker->type &&
+                     firstMarker->pointerDepth == 0 &&
+                     lastMarker->pointerDepth == 0 &&
+                     firstMarker->funcOrVar != FUNCTION &&
+                     lastMarker->funcOrVar != FUNCTION)
+            {
+                printf("operation valid, dragging\n");
+                CopyMarker(typeMarkers, currentNode, last);
+            }
+            else
+            {
+                printf("operation invalid\n");
+                SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Incompatible types", 0);
+                goto exit;
+            }
+        }
+    }
+    break;
+
+    case ASSIGN:
+    {
+        printf("Validating assignment\n");
+        TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
+        TreeNode *destination = (TreeNode *)ListGetIndex(&currentNode->children, 1);
+        if (*((uint8_t *)source->children.firstElement->content) == FUNC_DEC_REST + TERM_OFFSET)
+        {
+            // It is actually a function call
+            //  do nothing
+        }
+        else
+        {
+            TypeMarker *sourceType = ReadMarkerOnNode(typeMarkers, source);
+            TypeMarker *destinationType = ReadMarkerOnNode(typeMarkers, destination);
+            if (sourceType == NULL ||
+                destinationType == NULL ||
+                sourceType->funcOrVar == FUNCTION ||
+                destinationType->funcOrVar == FUNCTION ||
+                sourceType->pointerDepth != destinationType->pointerDepth ||
+                sourceType->type != destinationType->type)
+            {
+                printf("assignment invalid\n");
+                SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Incompatible types", 0);
+                goto exit;
+            }
+        }
+    }
+    break;
+
+    case ASSIGN_REST:
+    {
+        printf("backtracked to ASSIGN_REST, checking children\n");
+        TreeNode *operation = (TreeNode *)ListGetIndex(&currentNode->children, 1);
+        TreeNode *child = (TreeNode *)ListGetIndex(&currentNode->children, 0);
+        if (*((uint8_t *)operation->content) != '=')
+        {
+            TypeMarker *type = ReadMarkerOnNode(typeMarkers, child);
+            if (type->type > FLOAT || type->pointerDepth > 0)
+            {
+                printf("assign_rest invalid\n");
+                SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Incompatible types", 0);
+                goto exit;
+            }
+        }
+        CopyMarker(typeMarkers, currentNode, child);
+    }
+    break;
+
+    case EXPRESSION:
+    {
+        printf("backtracked to EXPRSSION, checking children\n");
+        TreeNode *child = (TreeNode *)PeekList(&currentNode->children);
+        TypeMarker *childMarker = ReadMarkerOnNode(typeMarkers, child);
+        if (childMarker == NULL)
+        {
+            printf("expression invalid\n");
+            SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Expression is empty", 0);
+            goto exit;
+        }
+        CopyMarker(typeMarkers, currentNode, child);
+    }
+    break;
+
+    case UNARY_ATOM:
+    {
+        printf("unary backtrack\n");
+        TreeNode *lastChild = (TreeNode *)PeekList(&currentNode->children);
+        uint8_t *first = (uint8_t *)lastChild->content;
+        if /*atom Drag*/ (*first == ATOM + TERM_OFFSET)
+        {
+            // Only has child of type atom
+            printf("atom drag\n");
+            CopyMarker(typeMarkers, currentNode, lastChild);
+
+            TreeNode *isLiteral = TreeGetNodeConstant(currentNode, (uint8_t[]){0, 0}, 2);
+            TreeNode *valueNode = TreeGetNodeConstant(currentNode, (uint8_t[]){0, 0, 0}, 3);
+            uint32_t value = 0;
+            if (*((uint8_t *)isLiteral->content) == LITERAL_TERM + TERM_OFFSET)
+            {
+                sscanf((char *)valueNode->content, "%d", &value);
+                printf("parsing number: %s\n", (char *)valueNode->content);
+                // TODO: add string and char support
+            }
+            else
+            {
+                // TODO: add identifier support, have to travel stack
+            }
+            PushByte(mathStack, *nextReg);
+            ASM_Imm((Registers)((*nextReg)++), value);
+        }
+        if /*cast unary*/ (*first == '(')
+        {
+            // Only has child of type atom
+            printf("cast drag\n");
+            TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
+            CopyMarker(typeMarkers, currentNode, source);
+        }
+        if /*reference*/ (*first == '&')
+        {
+            printf("Ampersand\n");
+
+            TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
+            TypeMarker *originalMarker = ReadMarkerOnNode(typeMarkers, source);
+            if (originalMarker != NULL)
+            {
+                if (originalMarker->funcOrVar != VARIABLE)
+                {
+                    SetError(error, POINTERS, SEMANTIC_ANALYZER, "\"&\" must be used on variables", 0);
+                    goto exit;
+                }
+                if (originalMarker->pointerDepth == NULL_DEPTH)
+                {
+                    SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot reference a NULL value", 0);
+                    goto exit;
+                }
+                printf("referencing, %d, %d, %d\n", (int)originalMarker->type, (int)originalMarker->pointerDepth, originalMarker->funcOrVar);
+                // Copy the marker
+                AddTypeMarker(typeMarkers, currentNode, originalMarker->type, originalMarker->pointerDepth + 1, NEITHER);
+                printf("Copied marker from child\n");
+            }
+            else
+            {
+                printf("nothing to reference\n");
+            }
+        }
+        if /*dereference*/ (*first == '*')
+        {
+            printf("dereference\n");
+
+            TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
+            TypeMarker *originalMarker = ReadMarkerOnNode(typeMarkers, source);
+            if (originalMarker != NULL)
+            {
+                if (originalMarker->pointerDepth == 0)
+                {
+                    SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot dereference a non-pointer", 0);
+                    goto exit;
+                }
+                if (originalMarker->pointerDepth == NULL_DEPTH)
+                {
+                    SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot dereference a NULL value", 0);
+                    goto exit;
+                }
+
+                if (originalMarker->funcOrVar == FUNCTION)
+                {
+                    SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot dereference a function", 0);
+                    goto exit;
+                }
+                // Copy the marker
+                AddTypeMarker(typeMarkers, currentNode, originalMarker->type, originalMarker->pointerDepth - 1, NEITHER);
+                printf("Copied marker from child\n");
+            }
+        }
+        if /*Not*/ (*first == '!')
+        {
+            printf("Not\n");
+
+            TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
+            TypeMarker *originalMarker = ReadMarkerOnNode(typeMarkers, source);
+            if (originalMarker != NULL)
+            {
+                if (originalMarker->funcOrVar == FUNCTION)
+                {
+                    SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot not a function", 0);
+                    goto exit;
+                }
+                if (originalMarker->pointerDepth > 0)
+                {
+                    SetError(error, POINTERS, SEMANTIC_ANALYZER, "Not can not be used on pointers, derefence first", 0);
+                    goto exit;
+                }
+                if (originalMarker->type != BOOL)
+                {
+                    SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Not cannot be used on types that are not bool. Use \"~\" for integers", 0);
+                    goto exit;
+                }
+
+                // Copy the marker
+                AddTypeMarker(typeMarkers, currentNode, originalMarker->type, originalMarker->pointerDepth, NEITHER);
+                printf("Copied marker from child\n");
+            }
+        }
+        if /*Unary Subtract*/ (*first == '-')
+        {
+            printf("Unary Subtract\n");
+
+            TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
+            TypeMarker *originalMarker = ReadMarkerOnNode(typeMarkers, source);
+            if (originalMarker != NULL)
+            {
+                if (originalMarker->funcOrVar == FUNCTION)
+                {
+                    SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot unary subtract a function", 0);
+                    goto exit;
+                }
+                if (originalMarker->pointerDepth > 0)
+                {
+                    SetError(error, POINTERS, SEMANTIC_ANALYZER, "Unary subtraction can not be used on pointers, derefence first", 0);
+                    goto exit;
+                }
+                if (originalMarker->type == BOOL || originalMarker->type == CHAR || originalMarker->type == VOID)
+                {
+                    SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Unary subtraction can not be used on non-integer types", 0);
+                    goto exit;
+                }
+                // Copy the marker
+                AddTypeMarker(typeMarkers, currentNode, originalMarker->type, originalMarker->pointerDepth, NEITHER);
+                printf("Copied marker from child\n");
+            }
+        }
+        if /*negate*/ (*first == '~')
+        {
+            printf("negate\n");
+
+            TreeNode *source = (TreeNode *)ListGetIndex(&currentNode->children, 0);
+            TypeMarker *originalMarker = ReadMarkerOnNode(typeMarkers, source);
+            if (originalMarker != NULL)
+            {
+                if (originalMarker->funcOrVar == FUNCTION)
+                {
+                    SetError(error, POINTERS, SEMANTIC_ANALYZER, "Cannot negate a function", 0);
+                    goto exit;
+                }
+                if (originalMarker->pointerDepth > 0)
+                {
+                    SetError(error, POINTERS, SEMANTIC_ANALYZER, "Negate can not be used on pointers, derefence first", 0);
+                    goto exit;
+                }
+                if (originalMarker->type == BOOL || originalMarker->type == CHAR || originalMarker->type == VOID)
+                {
+                    SetError(error, TYPE_MISMATCH, SEMANTIC_ANALYZER, "Negate can not be used on non-integer types", 0);
+                    goto exit;
+                }
+                // Copy the marker
+                AddTypeMarker(typeMarkers, currentNode, originalMarker->type, originalMarker->pointerDepth, NEITHER);
+                printf("Copied marker from child\n");
+            }
+        }
+    }
+    break;
+
+    case CAST_OR_EXPR:
+    {
+        printf("reached cast/expr\n");
+
+        TreeNode *lastChild = (TreeNode *)PeekList(&currentNode->children);
+        uint8_t *first = (uint8_t *)lastChild->content;
+
+        if /*Type cast*/ (*first == TYPE_TERM + TERM_OFFSET)
+        {
+            printf("Type cast\n");
+            TreeNode *castType = (TreeNode *)ListGetIndex(&currentNode->children, 3);
+            CopyMarker(typeMarkers, currentNode, castType);
+        }
+        if /*Parenthesis expression*/ (*first == EXPRESSION + TERM_OFFSET)
+        {
+            printf("Parenthesis expression\n");
+            TreeNode *expression = (TreeNode *)ListGetIndex(&currentNode->children, 1);
+            CopyMarker(typeMarkers, currentNode, expression);
+        }
+    }
+    break;
+    }
+
+exit:
+    printf("backtrack type check done\n");
+    sleep_ms(100);
+    return;
+}
+
+/*
+//////////////////////////////////////////////////////////
+
+    LEFT MATH
+
+    Whenever the tree reaches a math node that is left associative, generate the code for
+    it
+
+//////////////////////////////////////////////////////////
+*/
+
+void LeftMath(GeneralList *mathStack, uint8_t *nextReg, Error *error, GeneralList *typeMarkers, TreeNode *currentNode)
+{
+
+    uint8_t term = (*((uint8_t *)currentNode->content) - TERM_OFFSET);
+    printf("%d\n", term);
+    switch (term)
+    {
+    case ADDITION:
+    case ADDITIONREST:
+        if (currentNode->children.count >= 2)
+        {
+            TreeNode *operatorNode = TreeGetNodeConstant(currentNode, (uint8_t[]){0, 2}, 2);
+            printf("Got operator node\n");
+            sleep_ms(40);
+            if (operatorNode != NULL)
+            {
+                char operation = *((char *)operatorNode->content);
+                printf("math stack count: %d\n", mathStack->count);
+                Registers regA = (Registers)(*((uint8_t *)PopList(mathStack)));
+                Registers regB = (Registers)(*((uint8_t *)PopList(mathStack)));
+                (*nextReg) -= 2;
+                printf("popped math stack");
+                sleep_ms(40);
+                switch (operation)
+                {
+                    // left based
+                case '+':
+                    PushByte(mathStack, *nextReg);
+                    ASM_Math("add", regA, regB, (*nextReg)++);
+                    break;
+                case '-':
+                    PushByte(mathStack, *nextReg);
+                    ASM_Math("sub", regA, regB, (*nextReg)++);
+                    break;
+                }
+            }
+            else
+            {
+                // do nothing, there is no operation
+                printf("is null\n");
+                sleep_ms(40);
+            }
+        }
+        printf("asm call done\n");
+        sleep_ms(40);
+        break;
+    }
+}
 #endif
