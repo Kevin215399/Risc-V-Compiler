@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../Common.h"
+#include "GeneralList.h"
 
 int min(int a, int b);
 
@@ -40,7 +41,8 @@ TreeNode *TreeGetNode(TreeNode *root, GeneralList *navMap)
     // printf("navigate sucess\n");
     return currentNode;
 }
-TreeNode* TreeGetNodeConstant(TreeNode*root, uint8_t *navMap, uint8_t listLength){
+TreeNode *TreeGetNodeConstant(TreeNode *root, uint8_t *navMap, uint8_t listLength)
+{
     TreeNode *currentNode = root;
     for (int i = 0; i < listLength; i++)
     {
@@ -54,7 +56,6 @@ TreeNode* TreeGetNodeConstant(TreeNode*root, uint8_t *navMap, uint8_t listLength
         currentNode = (TreeNode *)ListGetIndex(&currentNode->children, child);
     }
     return currentNode;
-
 }
 TreeNode *TreeGetNodeLimited(TreeNode *root, GeneralList *navMap, uint8_t maxInstructions)
 {
@@ -92,6 +93,74 @@ bool AppendTreeFromRoot(TreeNode *root, GeneralList *parentNavMap, void *content
         return false;
     AppendTree(parent, content);
     return true;
+}
+void ClearTree(TreeNode *root)
+{
+    if (root == NULL)
+    {
+        return;
+    }
+    GeneralList exploreMap;
+    InitializeList(&exploreMap);
+    if (root->children.count == 0)
+    {
+        if (root->content != NULL)
+            free(root->content);
+        free(root);
+        return;
+    }
+    TreeNode *currentNode = root;
+    PushByte(&exploreMap, currentNode->children.count - 1);
+    currentNode = (TreeNode *)PeekList(&currentNode->children);
+
+    while (true)
+    {
+        printf("Delete tree loop: ");
+        for (int i = 0; i < exploreMap.count; i++)
+        {
+            printf("%d", (int)*((uint8_t *)ListGetIndex(&exploreMap, i)));
+        }
+        printf("\n");
+
+        if (currentNode->children.count == 0)
+        {
+        backtrack:
+            printf("deleting...\n");
+            if (currentNode->content != NULL)
+                free(currentNode->content);
+            free(currentNode);
+            uint8_t *topValue = (uint8_t *)PeekList(&exploreMap);
+            printf("Node deleted\n");
+            // Go to the next left node
+            while ((*topValue) == 0)
+            {
+                // Go up
+                free(PopList(&exploreMap));
+                printf("exploring UP\n");
+
+                if (exploreMap.count == 0)
+                {
+                    // Reached root node
+                    if (root->content != NULL)
+                        free(root->content);
+                    free(root);
+                    return;
+                }
+                topValue = (uint8_t *)PeekList(&exploreMap);
+            }
+
+            (*topValue)--;
+            currentNode = TreeGetNode(root, &exploreMap);
+        }
+        else
+        {
+            PushByte(&exploreMap, currentNode->children.count - 1);
+            currentNode = (TreeNode *)PeekList(&currentNode->children);
+        }
+    }
+
+    printf("tree deleted");
+    return;
 }
 
 #endif

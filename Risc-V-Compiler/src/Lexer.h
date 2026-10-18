@@ -18,16 +18,16 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
 
     uint32_t lexerIndex = 0;
     uint16_t workingLineCount = 0;
-    while (lexerIndex < strlen(sourceCode))
+    while (lexerIndex < strlen(code))
     {
         printf("Lex index: %d\n", lexerIndex);
-        if (sourceCode[lexerIndex] == '\n')
+        if (code[lexerIndex] == '\n')
         {
             lexerIndex++;
             workingLineCount++;
             continue;
         }
-        if (sourceCode[lexerIndex] == ' ')
+        if (code[lexerIndex] == ' ')
         {
             lexerIndex++;
             continue;
@@ -40,9 +40,9 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
         for (int i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++)
         {
             char *keyword = keywords[i];
-            if (strlen(sourceCode) - lexerIndex < strlen(keyword))
+            if (strlen(code) - lexerIndex < strlen(keyword))
                 continue;
-            if (strncmp((&sourceCode[lexerIndex]), keyword, strlen(keyword)) == 0)
+            if (strncmp((&code[lexerIndex]), keyword, strlen(keyword)) == 0)
             {
                 tokenLength = strlen(keyword);
                 matchType = KEYWORD;
@@ -54,9 +54,9 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
         for (int i = 0; i < sizeof(typewords) / sizeof(typewords[0]); i++)
         {
             char *type = typewords[i];
-            if (strlen(sourceCode) - lexerIndex < strlen(type))
+            if (strlen(code) - lexerIndex < strlen(type))
                 continue;
-            if (strncmp((&sourceCode[lexerIndex]), type, strlen(type)) == 0)
+            if (strncmp((&code[lexerIndex]), type, strlen(type)) == 0)
             {
                 tokenLength = strlen(type);
                 matchType = TYPE;
@@ -68,9 +68,9 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
         for (int i = 0; i < sizeof(operators) / sizeof(operators[0]); i++)
         {
             char *operator= operators[i];
-            if (strlen(sourceCode) - lexerIndex < strlen(operator))
+            if (strlen(code) - lexerIndex < strlen(operator))
                 continue;
-            if (strncmp(&sourceCode[lexerIndex], operator, strlen(operator)) == 0)
+            if (strncmp(&code[lexerIndex], operator, strlen(operator)) == 0)
             {
                 tokenLength = strlen(operator);
                 matchType = OPERATOR;
@@ -82,9 +82,9 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
         for (int i = 0; i < sizeof(seperators) / sizeof(seperators[0]); i++)
         {
             char seperator = seperators[i];
-            if (strlen(sourceCode) - lexerIndex < 1)
+            if (strlen(code) - lexerIndex < 1)
                 continue;
-            if (sourceCode[lexerIndex] == seperator)
+            if (code[lexerIndex] == seperator)
             {
                 tokenLength = 1;
                 matchType = SEPERATOR;
@@ -97,9 +97,9 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
         for (int i = 0; i < sizeof(literals) / sizeof(literals[0]); i++)
         {
             char *literal = literals[i];
-            if (strlen(sourceCode) - lexerIndex < strlen(literal))
+            if (strlen(code) - lexerIndex < strlen(literal))
                 continue;
-            if (strncmp(&sourceCode[lexerIndex], literal, strlen(literal)) == 0)
+            if (strncmp(&code[lexerIndex], literal, strlen(literal)) == 0)
             {
                 tokenLength = strlen(literal);
                 matchType = LITERAL;
@@ -108,51 +108,44 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
             }
         }
         // Check for string literals
-        if ((sourceCode[lexerIndex]) == '\"')
+        if ((code[lexerIndex]) == '\"')
         {
-            while (lexerIndex + tokenLength < strlen(sourceCode))
+            while (lexerIndex + tokenLength < strlen(code))
             {
                 tokenLength++;
-                if (sourceCode[lexerIndex] == '\"')
+                if (code[lexerIndex + tokenLength] == '\"')
                 {
                     break;
                 }
             }
-            if (lexerIndex + tokenLength >= strlen(sourceCode))
+            if (lexerIndex + tokenLength >= strlen(code))
             {
                 SetError(error, SYNTAX_ERROR, LEXER, "Missing closing \'\"\'", 0);
                 goto exit;
             }
+            tokenLength++;
             printf("LITERAL len: %d\n", tokenLength);
 
             matchType = LITERAL;
             goto allocateToken;
         }
         // Check for number literals
-        if (IsNumber(sourceCode[lexerIndex]) || sourceCode[lexerIndex]=='.')
+        if (IsNumber(code[lexerIndex]) || code[lexerIndex] == '.')
         {
             bool hasDecimal = false;
-            bool hasNegative = false;
-            while (lexerIndex + tokenLength < strlen(sourceCode))
+            while (lexerIndex + tokenLength < strlen(code))
             {
                 tokenLength++;
-                char nextChar = (sourceCode[lexerIndex + tokenLength]);
+                char nextChar = (code[lexerIndex + tokenLength]);
                 if (!IsNumber(nextChar))
                 {
-                    if (nextChar == '-' && !hasNegative)
+                    if (nextChar == '.' && !hasDecimal)
                     {
-                        hasNegative = true;
+                        hasDecimal = true;
                     }
                     else
                     {
-                        if (nextChar == '.' && !hasDecimal)
-                        {
-                            hasDecimal = true;
-                        }
-                        else
-                        {
-                            break;
-                        }
+                        break;
                     }
                 }
             }
@@ -163,14 +156,14 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
         }
 
         // Check for identifiers
-        if (IsLetter(sourceCode[lexerIndex]) || (sourceCode[lexerIndex] == '_'))
+        if (IsLetter(code[lexerIndex]) || (code[lexerIndex] == '_'))
         {
             bool hasDecimal = false;
             bool hasNegative = false;
-            while (lexerIndex + tokenLength < strlen(sourceCode))
+            while (lexerIndex + tokenLength < strlen(code))
             {
                 tokenLength++;
-                char nextChar = (sourceCode[lexerIndex + tokenLength]);
+                char nextChar = (code[lexerIndex + tokenLength]);
                 if (!IsLetter(nextChar) && nextChar != '_' && !IsNumber(nextChar))
                 {
                     break;
@@ -190,7 +183,7 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
             Token *token = (Token *)malloc(sizeof(Token));
             token->type = matchType;
             token->value = (char *)malloc(tokenLength + 1);
-            strncpy(token->value, &sourceCode[lexerIndex], tokenLength);
+            strncpy(token->value, &code[lexerIndex], tokenLength);
 
             token->value[tokenLength] = '\0';
             token->lineNumber = workingLineCount;

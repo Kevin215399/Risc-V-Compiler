@@ -27,6 +27,7 @@ typedef enum Location
     SYNTAX_ANALYZER,
     SEMANTIC_ANALYZER,
     SPECIAL_PARSER,
+    ASM_GENERATION
 } Location;
 
 typedef struct Error
@@ -38,7 +39,7 @@ typedef struct Error
 } Error;
 
 const char *ERR_CODE_NAMES[] = {"Success", "Syntax Error", "Unexpected Null", "Malloc failure :( bad bad bad", "Undefined value", "AST Structure", "Type mismatch", "Pointer ettiquite", "Duplicate symbol"};
-const char *ERR_LOC_NAMES[] = {"OTHER", "LEXER", "SYNTAX ANALYZER", "SEMANTIC ANALYZER", "SPECIAL PARSER"};
+const char *ERR_LOC_NAMES[] = {"OTHER", "LEXER", "SYNTAX ANALYZER", "SEMANTIC ANALYZER", "SPECIAL PARSER", "ASM GENERATOR"};
 
 void SetError(Error *reference, ErrorCode error, Location location, char *message, uint16_t line)
 {

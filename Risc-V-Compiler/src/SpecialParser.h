@@ -3,16 +3,15 @@
 
 #include "Common.h"
 #include "SemanticAnalyzer.h"
-typedef struct
-{
-    char *operator;
-    uint8_t precedence;
-} OperatorPrecedence;
+#include "Common/Keywords.h"
+
+Identifier *FindSymbol(GeneralList *variableStack, char *symbol);
 
 typedef struct
 {
     Token *token;
     uint8_t precedence;
+    uint8_t parameters;
 } PrecedenceWrapper;
 
 typedef enum
@@ -22,36 +21,11 @@ typedef enum
     CAST_POINTER,
 } Cast;
 
-// when an unkown token is found, set to this precedence
-#define UNKOWN_PRECEDENCE 13
-
-OperatorPrecedence OPERATOR_PRECEDENT_LIST[] = {
-    {"&", 4},
-
-    {"%", 3},
-    {"^", 3},
-    {"*", 3},
-    {"/", 3},
-
-    {"-", 2},
-    {"+", 2},
-
-    {">=", 1},
-    {"<=", 1},
-    {">", 1},
-    {"<", 1},
-
-    {"==", 1},
-    {"!=", 1},
-
-};
-#define OPERATOR_PRECEDENT_COUNT sizeof(OPERATOR_PRECEDENT_LIST) / sizeof(OperatorPrecedence)
-
 typedef struct FunctionCall
 {
     uint8_t paramatersLeft;
     Identifier *templateFunction;
-}FunctionCall;
+} FunctionCall;
 
 // Function will destroy input list
 Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *outputStack)
@@ -79,6 +53,7 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
     while (tokens->count > 0)
     {
         printf("loop start, %d left\n", tokens->count);
+        sleep_ms(100);
         Token *currentToken = (Token *)PopListFirst(tokens);
         switch (currentToken->type)
         {
@@ -89,7 +64,6 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
                 SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Cannot do expressions within a cast, use (type pointer)variable", 0);
                 goto exit;
             }
-            Token *peekNext = (Token *)ListGetIndex(tokens, 0);
             if (currentToken->value[0] == ')')
             {
                 // If the operator is parenthesis, pop off all of the previous operations until you get to the matching one
@@ -104,6 +78,20 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
 
                     printf("moved within parenthesis to operand stack\n");
                 }
+                FunctionCall *lastFunction = PopList(&functionCalls);
+                if (lastFunction != NULL)
+                {
+                    if (lastFunction->paramatersLeft > 0)
+                    {
+                        lastFunction->paramatersLeft--;
+                    }
+                    if (lastFunction->paramatersLeft != 0)
+                    {
+                        SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Not enough parameters for function", 0);
+                        goto exit;
+                    }
+                    free(lastFunction);
+                }
 
                 PrecedenceWrapper *poppedOpp = (PrecedenceWrapper *)PopList(&operatorStack);
                 free(poppedOpp);
@@ -112,10 +100,16 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
             }
             else if (currentToken->value[0] == '(')
             {
+                Token *peekNext = (Token *)ListGetIndex(tokens, 0);
+                Token *peekLast = (Token *)PeekList(outputStack);
                 PrecedenceWrapper *wrapped = (PrecedenceWrapper *)malloc(sizeof(PrecedenceWrapper));
                 wrapped->token = currentToken;
                 wrapped->precedence = 0;
                 PushList(&operatorStack, wrapped);
+                if (peekLast == NULL || peekLast->type != IDENTIFIER)
+                {
+                    PushList(&functionCalls, NULL);
+                }
                 if (peekNext == NULL)
                 {
                     SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Missing closing parenthesis", 0);
@@ -127,6 +121,38 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
                     {
                         castPhase = CAST_TYPE;
                     }
+                }
+            }
+            else if (currentToken->value[0] == ',')
+            {
+                if (functionCalls.count == 0)
+                {
+                    SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Unexpected token \",\"", 0);
+                    goto exit;
+                }
+                else
+                {
+                    FunctionCall *lastCall = (FunctionCall *)PeekList(&functionCalls);
+
+                    if (lastCall == NULL || lastCall->paramatersLeft <= 1)
+                    {
+                        SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Unexpected token \",\"", 0);
+                        goto exit;
+                    }
+
+                    while (
+                        operatorStack.count > 0 &&
+                        ((PrecedenceWrapper *)PeekList(&operatorStack))->token->value[0] != '(')
+                    {
+                        PrecedenceWrapper *poppedOpp = (PrecedenceWrapper *)PopList(&operatorStack);
+                        PushList(outputStack, poppedOpp->token);
+                        free(poppedOpp);
+
+                        printf("moved within comma to operand stack\n");
+                    }
+                    free(currentToken);
+
+                    lastCall->paramatersLeft--;
                 }
             }
         }
@@ -147,11 +173,29 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
             PrecedenceWrapper *wrapped = (PrecedenceWrapper *)malloc(sizeof(PrecedenceWrapper));
             wrapped->token = currentToken;
 
+            uint8_t parameters = 2;
+            Token *lastOutput = (Token *)PeekList(outputStack);
+            if (lastOutput == NULL || lastOutput->type == OPERATOR)
+            {
+                // Two operators next to each other, means this one is unary
+                parameters = 1;
+            }
+            wrapped->parameters = parameters;
+
+            if (parameters == 1)
+            {
+                char *temp = malloc(strlen(currentToken->value) + 2);
+                sprintf(temp, "u%s", currentToken->value);
+                free(currentToken->value);
+                currentToken->value = temp;
+            }
+
             bool foundOperator = false;
             for (int i = 0; i < OPERATOR_PRECEDENT_COUNT; i++)
             {
-                if (strcmp(OPERATOR_PRECEDENT_LIST[i].operator, currentToken->value) == 0)
+                if (OPERATOR_PRECEDENT_LIST[i].parameters == parameters && strcmp(OPERATOR_PRECEDENT_LIST[i].operator, currentToken->value) == 0)
                 {
+                    printf("Operator found, index: %d\n", i);
                     wrapped->precedence = OPERATOR_PRECEDENT_LIST[i].precedence;
                     foundOperator = true;
                     break;
@@ -159,16 +203,18 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
             }
             if (!foundOperator)
             {
-                printf("not recognized");
+                printf("not recognized: %s\n", currentToken->value);
                 SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Operator not recognized", 0);
                 goto exit;
             }
-            while (operatorStack.count > 0 && ((PrecedenceWrapper *)PeekList(&operatorStack))->precedence >= wrapped->precedence)
+            PrecedenceWrapper* peek = ((PrecedenceWrapper *)PeekList(&operatorStack));
+            while (operatorStack.count > 0 && peek->precedence >= wrapped->precedence && peek->parameters!=1)
             {
-                printf("pop opp\n");
                 PrecedenceWrapper *poppedOpp = (PrecedenceWrapper *)PopList(&operatorStack);
+                printf("pop opp\n");
                 PushList(outputStack, poppedOpp->token);
                 free(poppedOpp);
+                peek = ((PrecedenceWrapper *)PeekList(&operatorStack));
             }
             PushList(&operatorStack, wrapped);
         }
@@ -186,6 +232,7 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
         break;
         case IDENTIFIER:
         {
+            Token *peekNext = (Token *)ListGetIndex(tokens, 0);
             if (castPhase != NO_CAST)
             {
                 SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Symbols are not allowed within a cast", 0);
@@ -196,6 +243,26 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
             {
                 SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Symbol not defined in current scope", 0);
                 goto exit;
+            }
+            if (symbol->funcOrVar == FUNCTION)
+            {
+                if (peekNext->value[0] != '(')
+                {
+                    SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Symbol is function, but is missing call", 0);
+                    goto exit;
+                }
+                FunctionCall *call = malloc(sizeof(FunctionCall));
+                call->paramatersLeft = symbol->parameters.count;
+                call->templateFunction = symbol;
+                PushList(&functionCalls, call);
+            }
+            else
+            {
+                if (peekNext->value[0] == '(')
+                {
+                    SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Symbol is variable, but has a call", 0);
+                    goto exit;
+                }
             }
             PushList(outputStack, currentToken);
         }
@@ -226,6 +293,7 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
     }
 
 exit:
+sleep_ms(100);
     return error;
 }
 

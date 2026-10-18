@@ -66,6 +66,14 @@ void *PeekList(GeneralList *list)
     void *content = list->lastElement->content;
     return content;
 }
+void *PeekListFirst(GeneralList *list)
+{
+    if (list->count == 0)
+        return NULL;
+
+    void *content = list->firstElement->content;
+    return content;
+}
 
 void *PopList(GeneralList *list)
 {
@@ -231,9 +239,9 @@ void ListInsert(GeneralList *list, uint16_t index, void *content)
         printf("list is null\n");
         return;
     }
-    if (index >= list->count)
+    if (index > list->count)
     {
-        printf("out of bounds\n");
+        printf("insert out of bounds\n");
         return;
     }
 
@@ -247,10 +255,22 @@ void ListInsert(GeneralList *list, uint16_t index, void *content)
         list->lastElement->content = content;
         list->count = 1;
     }
+    else if (index == 0)
+    {
+        GeneralListNode *newElement = (GeneralListNode *)malloc(sizeof(GeneralListNode));
+        newElement->content = content;
+        newElement->next = list->firstElement;
+        list->firstElement->previous = newElement;
+        list->firstElement = newElement;
+
+        newElement->previous = NULL;
+
+        list->count++;
+    }
     else
     {
         GeneralListNode *currentNode = list->firstElement;
-        for (int i = 0; i < index; i++)
+        for (int i = 0; i < index - 1; i++)
         {
             currentNode = currentNode->next;
         }
@@ -260,6 +280,7 @@ void ListInsert(GeneralList *list, uint16_t index, void *content)
         if (currentNode->next == NULL)
         {
             newElement->next = NULL;
+            list->lastElement = newElement;
         }
         else
         {
@@ -269,9 +290,21 @@ void ListInsert(GeneralList *list, uint16_t index, void *content)
         currentNode->next = newElement;
         newElement->previous = currentNode;
 
-        list->lastElement = newElement;
         list->count++;
     }
 }
 
+void PushByte(GeneralList *list, uint8_t value)
+{
+    uint8_t *allocated = (uint8_t *)malloc(sizeof(uint8_t));
+    *allocated = value;
+    PushList(list, allocated);
+}
+
+void PushCharArr(GeneralList *list, char *value)
+{
+    char *allocated = (char *)malloc(strlen(value) + 1);
+    strcpy(allocated, value);
+    PushList(list, allocated);
+}
 #endif

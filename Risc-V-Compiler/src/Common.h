@@ -15,6 +15,23 @@ extern char *sourceCode;
 
 #pragma region Objects
 
+typedef enum StackType
+{
+    STACK_VAR,
+    RETURN_VALUE,
+    PARAMETER,
+    REG_STATE,
+    STACK_POINTER,
+    STR_LITERAL
+} StackType;
+
+typedef struct StackPointer
+{
+    char *name;
+    uint32_t offset;
+    StackType type;
+} StackPointer;
+
 typedef enum TokenType
 {
     IDENTIFIER,
@@ -23,7 +40,9 @@ typedef enum TokenType
     OPERATOR,
     LITERAL,
     TYPE,
-    NONE
+    NONE,
+    CFG_RULE,
+    STACK_POINTER_TOKEN
 } TokenType;
 typedef struct Token
 {
@@ -65,17 +84,50 @@ typedef struct Identifier
     uint8_t pointerDepth;
     FuncOrVar funcOrVar;
     GeneralList parameters;
+    uint32_t labelNumber;
 } Identifier;
 
-typedef enum Registers {
+typedef enum Registers
+{
+    X0,
+    SP,
+    GP,
+    A0,
+    A1,
+    A2,
+    A3,
+    A4,
+    A5,
+    A6,
+    A7,
     T0,
     T1,
     T2,
     T3,
     T4,
     T5,
-    T6
+    T6,
 } Registers;
+char *registerNames[] = {
+    "x0",
+    "sp",
+    "gp",
+    "a0",
+    "a1",
+    "a2",
+    "a3",
+    "a4",
+    "a5",
+    "a6",
+    "a7",
+    "t0",
+    "t1",
+    "t2",
+    "t3",
+    "t4",
+    "t5",
+    "t6",
+};
 
 #pragma endregion
 
@@ -96,19 +148,6 @@ bool IsLetter(char input)
     return false;
 }
 
-void PushByte(GeneralList *list, uint8_t value)
-{
-    uint8_t *allocated = (uint8_t *)malloc(sizeof(uint8_t));
-    *allocated = value;
-    PushList(list, allocated);
-}
-
-void PushCharArr(GeneralList *list, char *value)
-{
-    char *allocated = (char *)malloc(strlen(value) + 1);
-    strcpy(allocated, value);
-    PushList(list, allocated);
-}
 IdentifierType ParseType(char *input)
 {
     IdentifierType output = INT;
@@ -127,6 +166,32 @@ IdentifierType ParseType(char *input)
         printf("!!!!!!!!! PARSETYPE() COULD NOT FIND MATCH FOR %s !!!!!!!\n", input);
     }
     return output;
+}
+IdentifierType TypeOfString(char *input)
+{
+    long value = 0;
+    bool isInteger = sscanf(input, "%ld", &value);
+    if (isInteger)
+    {
+        if (value < 0)
+        {
+            return INT;
+        }
+        if (value > 2147483647)
+        {
+            return UINT32_T;
+        }
+        return INT;
+    }
+    if (strcmp(input, "false") == 0)
+    {
+        return BOOL;
+    }
+    if (strcmp(input, "true") == 0)
+    {
+        return BOOL;
+    }
+    return CHAR;
 }
 int min(int a, int b)
 {
@@ -147,6 +212,15 @@ int IntLength(int value)
     if (abs(value) != value)
     {
         numberLength += 1;
+    }
+    return numberLength;
+}
+int UintLength(uint32_t value)
+{
+    int numberLength = 1;
+    if (value != 0)
+    {
+        numberLength = (int)(log10(value)) + 1;
     }
     return numberLength;
 }

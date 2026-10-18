@@ -4,7 +4,10 @@
 #include "SemanticAnalyzer.h"
 #include "ASMGenerator.h"
 #include "SpecialParser.h"
-char *sourceCode = "3+2+4";
+char *sourceCode = "void main(){pinOut(25); pinToggle(25); return 1;}";
+
+//I think i added passing parameters, but only when it goes through the special parse
+//Either get rid of independent calls or add it to call nodes
 
 void InitializeClasses()
 {
@@ -36,19 +39,6 @@ int main()
         printf("Token: %d, %s\n", token->type, token->value);
     }
     sleep_ms(300);
-    
-
-    GeneralList parsedOut;
-    InitializeList(&parsedOut);
-    ShuntYard(&tokens, &parsedOut);
-    printf("done\n");
-    for (int i = 0; i < parsedOut.count; i++)
-    {
-        printf("%s\n", ((Token *)ListGetIndex(&parsedOut, i))->value);
-    }
-    goto exit;
-
-    
 
     TreeNode *tree = (TreeNode *)malloc(sizeof(TreeNode));
     InitializeTree(tree);
@@ -62,9 +52,7 @@ int main()
     }
     free(error);
 
-    GeneralList *asmList = malloc(sizeof(GeneralList));
-    InitializeList(asmList);
-    SetASMDestination(asmList);
+    SetASMDestination();
 
     error = SemanticAnylsis(tree);
     printf("Done\n");
@@ -92,7 +80,7 @@ inspect:
             TreeNode *node = TreeGetNode(tree, &navigation);
             if (node == NULL)
                 goto getNodeFail;
-            uint8_t *value = node->content;
+            uint8_t *value = ((Token *)node->content)->value;
 
             printf("Node value: ");
             if (*value >= TERM_OFFSET)
@@ -110,7 +98,7 @@ inspect:
                 TreeNode *node = TreeGetNode(tree, &navigation);
                 if (node == NULL)
                     goto getNodeFail;
-                uint8_t *value = node->content;
+                uint8_t *value = ((Token *)node->content)->value;
                 if (*value >= TERM_OFFSET)
                 {
                     printf("%d, ", (int)(*value) - TERM_OFFSET);
