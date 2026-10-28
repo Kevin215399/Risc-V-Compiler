@@ -9,6 +9,19 @@ typedef struct
     bool unary;
 } OperatorPrecedence;
 
+typedef struct {
+    char *source;
+    char *replacement;
+} CompilerDirective;
+
+CompilerDirective compilerDirectives[] ={
+    {"INPUT", "0"},
+    {"INPUT_PULLUP", "1"},
+    {"INPUT_PULLDOWN", "2"},
+    {"OUTPUT", "3"},
+    {"HIGH", "1"},
+    {"LOW", "0"},
+};
 
 char *keywords[] = {
     "for",
@@ -17,14 +30,6 @@ char *keywords[] = {
     "else",
     "break",
     "return",
-    "pinSet",
-    "pinFlip",
-    "pinMode",
-    "print",
-    "malloc",
-    "memset",
-    "memread",
-    "free"
 };
 
 // Also update...

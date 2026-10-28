@@ -36,11 +36,10 @@ const char *NonTerms[] = {"uint8_t", "uint16_t", "uint32_t", "int8_t", "int16_t"
 #define FREE_LABEL (uint32_t)(-2)
 #define MEM_READ (uint32_t)(-3)
 #define MEM_WRITE (uint32_t)(-4)
-#define PIN_OUT (uint32_t)(-5)
-#define PIN_IN (uint32_t)(-6)
-#define PIN_READ (uint32_t)(-7)
-#define PIN_WRITE (uint32_t)(-8)
-#define PIN_TOGGLE (uint32_t)(-9)
+#define PIN_MODE (uint32_t)(-5)
+#define PIN_READ (uint32_t)(-6)
+#define PIN_WRITE (uint32_t)(-7)
+#define PIN_TOGGLE (uint32_t)(-8)
 
 typedef struct GrammarRule
 {
@@ -442,15 +441,23 @@ void SetupCFG()
     AddTerm(23, 21, ")");
     // CALL_PARAM
     AddNonTerm(24, 13, 25);
+    AddNonTerm(24, 13, 24);
     AddTerm(24, 18, "");
     AddNonTerm(24, 21, 25);
+    AddNonTerm(24, 21, 24);
     AddTerm(24, 23, ",");
     AddNonTerm(24, 23, 25);
+    AddNonTerm(24, 23, 24);
     AddNonTerm(24, 26, 25);
+    AddNonTerm(24, 26, 24);
     AddNonTerm(24, 27, 25);
+    AddNonTerm(24, 27, 24);
     AddNonTerm(24, 28, 25);
+    AddNonTerm(24, 28, 24);
     AddNonTerm(24, 29, 25);
+    AddNonTerm(24, 29, 24);
     AddNonTerm(24, 30, 25);
+    AddNonTerm(24, 30, 24);
     // EXPRESSION
     // TYPE
     AddTerm(26, 0, "uint8_t");

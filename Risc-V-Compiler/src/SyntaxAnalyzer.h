@@ -51,7 +51,7 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
         if (stackToken == NULL)
         {
             printf("NULL\n");
-            sleep_ms(100);
+            delay(100);
             SetError(error, UNEXPECTED_NULL, SYNTAX_ANALYZER, "Lowkey, I don't even know what this means. Stacktoken is null", 0);
             goto exit;
         }
@@ -113,7 +113,9 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
 
                 while (token->value[0] != ';')
                 {
-
+                    if(token->value[0]==',' && parenthesis == 0){
+                        break;
+                    }
                     if (token->value[0] == '(' || token->value[0] == '[')
                     {
                         parenthesis++;
@@ -237,6 +239,13 @@ Error *AnalyzeSyntax(GeneralList *tokens, TreeNode *output)
             Token *delToken = (Token *)PopList(&stack);
             free(delToken->value);
             free(delToken);
+
+            printf("push to tree map:");
+            for (int i = 0; i < treeNavStack.count; i++)
+            {
+                printf("%d", (int)*(uint8_t *)ListGetIndex(&treeNavStack, i));
+            }
+            printf("\n");
             for (int i = rule->count - 1; i >= 0; i--)
             {
                 char *newRule = (char *)ListGetIndex(rule, i);

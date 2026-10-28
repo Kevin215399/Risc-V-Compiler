@@ -29,10 +29,17 @@ const char picoAsmHeader[] = {
 .word 0xab123579 # Footer magic number
 
 .equ IO_BANK0_BASE,   0x40028000    # IO Bank0 Base Address
-.equ SIO_BASE,        0xD0000000    # SIO (Single-Cycle I/O) Base Address
-.equ GPIO_OUT_XOR,    SIO_BASE + 0x28   # GPIO output XOR register (atomic)
-.equ GPIO_DIR,        SIO_BASE + 0x30   # GPIO direction register
 .equ PADS_BANK0_BASE, 0x40038000    # User Bank Pad Control register base
+.equ SIO_BASE,        0xD0000000    # SIO (Single-Cycle I/O) Base Address
+
+.equ GPIO_DIR,        SIO_BASE + 0x30   # GPIO direction register
+
+.equ GPIO_OUT,        SIO_BASE + 0x10
+.equ GPIO_OUT_XOR,    SIO_BASE + 0x28   # GPIO output XOR register (atomic)
+.equ GPIO_SET,        SIO_BASE + 0x14   # GPIO direction register
+.equ GPIO_CLEAR,        SIO_BASE + 0x18   # GPIO direction register
+
+.equ GPIO_IN,        SIO_BASE + 0x4   # GPIO input
 
 .section .text          # Code section
 .global main            # Make 'main' visible to the linker
@@ -91,15 +98,19 @@ peekNum:
 
 # a0 = result
 # a1 = jump to
-# a2-6 = parameters
+# a2 = parameter offset
 # a7 = following line
 callFunction:
+  
   #store t0, because fp must be changed
   mv s0, t0
   mv t0, sp
 
+  sub t0, t0, a2
+
   # push all temp registers
-  #t0 stored earlier
+
+  #t0 stored to s0 earlier
   jal s2, push
   mv s0, t1
   jal s2, push
@@ -114,18 +125,6 @@ callFunction:
   mv s0, t6
   jal s2, push
 
-  # push all parameters
-  mv s0, a2
-  jal s2, push
-  mv s0, a3
-  jal s2, push
-  mv s0, a4
-  jal s2, push
-  mv s0, a5
-  jal s2, push
-  mv s0, a6
-  jal s2, push
-
   # push return point
   mv s0, a7
   jal s2, push
@@ -135,8 +134,13 @@ callFunction:
 #a0 = return value
 #t0 = frame pointer
 functionReturn:
+  
+  lw s0, 0(t0)
+  add t0, t0, s0
+
+
   #a7 is return line
-  lw a7, 48(t0)
+  lw a7, 28(t0)
 
   lw t1, 4(t0)
   lw t2, 8(t0)
@@ -145,13 +149,13 @@ functionReturn:
   lw t5, 20(t0)
   lw t6, 24(t0)
   mv sp, t0
+  sub sp, sp, s0
   lw t0, 0(t0)
   
   jr a7
 
 malloc:
-  addi s1, x0, 6
-  jal s2, peekNum
+  lw s0, 4(t0)
   #memory index
   mv t2, gp
   mallocResetCount:
@@ -195,8 +199,11 @@ malloc:
 
   j functionReturn
 
-#a0 - pin
-pinOut:
+#p1 - pin
+#p2 - mode (3=output, 2=input pd, 1= input pu, 0= input)
+pinMode:
+  lw a2, 4(t0)
+  lw a3, 8(t0)
   addi t4, x0, 1
   sll t4, t4, a2
 
@@ -220,7 +227,19 @@ pinOut:
   li t1, GPIO_DIR     # Load the address of the GPIO direction register
   lw t2, 0(t1)        # Load the current value of the direction reg. to t2
   mv t3, t4    # Load the bitmask for the used GPIO
+
+  li t5, 3
+  blt a3, t5, pinIn
+
   or t2, t2, t3       # Set the bit for used GPIO (output mode)
+  j notInput
+
+  pinIn:
+  not t3, t3
+  and t2, t2, t3       # Clear the bit for used GPIO (input mode)
+
+  notInput:
+
   sw t2, 0(t1)        # Store the updated value back to the GPIO dir. reg.
 
   ### Setup: Clear Pad Isolation for GPIO
@@ -229,12 +248,36 @@ pinOut:
   lw t2, 0(t1)        # Load the current value of the pad register
   andi t2, t2, ~0x100 # Clear isolation bit (bit nr 8)
   ori t2, t2, 0x30    # Drive strength 12mA
+
+  li t5, 3
+  beq a3, t5, notInputEnable
+  ori t2, t2, 1<<6    # Input enabled
+  ori t2, t2, 1<<7    # output disabled
+  j checkPulls
+  notInputEnable:
+  andi t2, t2, ~(1<<6)    # Input disabled
+  andi t2, t2, ~(1<<7)    # output enabled
+  checkPulls:
+
+  li t5, 2
+  bne a3, t5, notPullDown
+  ori t2, t2, 4    # Pull Down
+  andi t2, t2, ~8    # Pull up off
+  notPullDown:
+
+  li t5, 1
+  bne a3, t5, notPullUp
+  ori t2, t2, 8    # Pull up
+  andi t2, t2, ~4    # Pull Down off
+  notPullUp:
+
   sw t2, 0(t1)        # Store the updated value back to the pad register
 
   j functionReturn
 
 #a0 - pin
 pinToggle:
+  lw a2, 4(t0)
   addi t4, x0, 1
   sll t4, t4, a2
 
@@ -244,6 +287,49 @@ pinToggle:
 
   sw t2, 0(t1)        # Set the bit (atomic bit setting-writing)
   
+  j functionReturn
+
+# p1 - pin
+# p2 - value
+pinWrite:
+  lw a2, 4(t0)
+  lw a3, 8(t0)
+  
+  addi t4, x0, 1
+  sll t4, t4, a2
+
+  beqz a3, setLow
+
+  #set the pin HIGH
+  li t1, GPIO_OUT
+  lw t2, 0(t1)
+  or t2, t2, t4
+  sw t2, 0(t1)
+
+  j functionReturn
+  setLow:
+  
+  #set the pin LOW
+  li t1, GPIO_OUT
+  lw t2, 0(t1)
+  not t4,t4
+  and t2, t2, t4
+  sw t2, 0(t1)
+
+  j functionReturn
+
+# p1- pin
+pinRead:
+  lw a2, 4(t0)
+
+  addi t4, x0, 1
+  sll t4, t4, a2
+  
+  li t1, GPIO_IN
+  lw t2, 0(t1)
+
+  and t2, t2, t4
+  sltu a0, x0, t2
   j functionReturn
 
 EXIT:

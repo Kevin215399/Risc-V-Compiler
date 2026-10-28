@@ -53,7 +53,7 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
     while (tokens->count > 0)
     {
         printf("loop start, %d left\n", tokens->count);
-        sleep_ms(100);
+        delay(100);
         Token *currentToken = (Token *)PopListFirst(tokens);
         switch (currentToken->type)
         {
@@ -207,8 +207,8 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
                 SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Operator not recognized", 0);
                 goto exit;
             }
-            PrecedenceWrapper* peek = ((PrecedenceWrapper *)PeekList(&operatorStack));
-            while (operatorStack.count > 0 && peek->precedence >= wrapped->precedence && peek->parameters!=1)
+            PrecedenceWrapper *peek = ((PrecedenceWrapper *)PeekList(&operatorStack));
+            while (operatorStack.count > 0 && peek->precedence >= wrapped->precedence && peek->parameters != 1)
             {
                 PrecedenceWrapper *poppedOpp = (PrecedenceWrapper *)PopList(&operatorStack);
                 printf("pop opp\n");
@@ -246,6 +246,8 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
             }
             if (symbol->funcOrVar == FUNCTION)
             {
+                printf("Found function\n");
+                delay(100);
                 if (peekNext->value[0] != '(')
                 {
                     SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Symbol is function, but is missing call", 0);
@@ -255,6 +257,12 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
                 call->paramatersLeft = symbol->parameters.count;
                 call->templateFunction = symbol;
                 PushList(&functionCalls, call);
+
+                PrecedenceWrapper *wrapped = (PrecedenceWrapper *)malloc(sizeof(PrecedenceWrapper));
+                wrapped->token = currentToken;
+                wrapped->parameters = symbol->parameters.count;
+                wrapped->precedence = 255;
+                PushList(&operatorStack, wrapped);
             }
             else
             {
@@ -263,8 +271,8 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
                     SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Symbol is variable, but has a call", 0);
                     goto exit;
                 }
+                PushList(outputStack, currentToken);
             }
-            PushList(outputStack, currentToken);
         }
         break;
         case TYPE:
@@ -293,7 +301,8 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
     }
 
 exit:
-sleep_ms(100);
+    printf("shunt yard done");
+    delay(100);
     return error;
 }
 

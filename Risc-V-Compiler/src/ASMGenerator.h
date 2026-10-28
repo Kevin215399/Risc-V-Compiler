@@ -211,6 +211,33 @@ void ASM_JumpStringAndLink(Registers targetRegister, char *label)
     PushTargetASMList(cstr);
     printf("asm JSAL done\n");
 }
+void CallFunction(Identifier *function)
+{
+    switch (function->labelNumber)
+    {
+    case PIN_MODE:
+        ASM_LoadAddressString(A1, "pinMode");
+        ASM_JumpStringAndLink(A7, "callFunction");
+        break;
+    case PIN_TOGGLE:
+        ASM_LoadAddressString(A1, "pinToggle");
+        ASM_JumpStringAndLink(A7, "callFunction");
+        break;
+    case PIN_WRITE:
+        ASM_LoadAddressString(A1, "pinWrite");
+        ASM_JumpStringAndLink(A7, "callFunction");
+        break;
+    case PIN_READ:
+        ASM_LoadAddressString(A1, "pinRead");
+        ASM_JumpStringAndLink(A7, "callFunction");
+        break;
+    default:
+        ASM_LoadAddress(A1, function->labelNumber);
+        ASM_JumpStringAndLink(A7, "callFunction");
+        break;
+    }
+    return;
+}
 
 ///////////////////////////////////
 ///////////////////////////////////
@@ -238,7 +265,7 @@ void PrintASMProgram()
 void ScopeOpenContext()
 {
     printf("Open context %d\n", scopes->count);
-    sleep_ms(100);
+    delay(100);
     GeneralList *newScope = (GeneralList *)malloc(sizeof(GeneralList));
     InitializeList(newScope);
     PushList(scopes, newScope);
@@ -246,7 +273,7 @@ void ScopeOpenContext()
 void CloseScopeContext(bool closingFunction)
 {
     printf("Close context %d\n", scopes->count);
-    sleep_ms(100);
+    delay(100);
     printf("Closing scope\n");
     if (scopes->count <= 1)
     {
@@ -256,8 +283,8 @@ void CloseScopeContext(bool closingFunction)
 
     if (!closingFunction && lastScope->count != 0)
     {
-        ASM_Imm(T1, lastScope->count * 4);
-        ASM_Math("sub", SP, T1, SP);
+        ASM_Imm(T6, lastScope->count * 4);
+        ASM_Math("sub", SP, T6, SP);
     }
     PopList(scopes);
 
@@ -337,45 +364,50 @@ StackPointer *LoadParameter(Error *error, Token *parameter, Registers destinatio
         }
         else
         {*/
-            printf(" Is variable\n");
-            StackPointer *stackPointer = NULL;
-            bool notFound = true;
-            bool isGlobalScope = false;
-            for (int x = 0; x < scopes->count; x++)
+        printf(" Is variable: %s\n", parameter->value);
+        delay(100);
+        StackPointer *stackPointer = NULL;
+        bool notFound = true;
+        bool isGlobalScope = false;
+        for (int x = 0; x < scopes->count; x++)
+        {
+            GeneralList *scope = ((GeneralList *)ListGetIndex(scopes, x));
+            for (int i = 0; i < scope->count; i++)
             {
-                GeneralList *scope = ((GeneralList *)ListGetIndex(scopes, x));
-                for (int i = 0; i < scope->count; i++)
+                StackPointer *checkPointer = ListGetIndex(scope, i);
+                printf("checking scope: %s\n", checkPointer->name);
+                if (strcmp(checkPointer->name, parameter->value) == 0)
                 {
-                    StackPointer *checkPointer = ListGetIndex(scope, i);
-                    printf("checking scope: %s\n", checkPointer->name);
-                    if (strcmp(checkPointer->name, parameter->value) == 0)
+                    stackPointer = checkPointer;
+                    notFound = false;
+                    if (x == 0)
                     {
-                        stackPointer = checkPointer;
-                        notFound = false;
-                        if (x == 0)
-                        {
-                            isGlobalScope = true;
-                        }
-                        printf("found at stack loc: %d\n", stackPointer->offset);
-                        break;
+                        isGlobalScope = true;
                     }
+                    printf("found at stack loc: %d\n", stackPointer->offset);
+                    break;
                 }
             }
-            if (notFound)
-            {
-                SetError(error, SYNTAX_ERROR, ASM_GENERATION, "Symbol does not exist in current scope", 0);
-                return NULL;
-            }
-            if (isGlobalScope)
-                ASM_StackLoadGlobal(destinationReg, stackPointer->offset * 4);
-            else
-                ASM_StackLoad(destinationReg, stackPointer->offset * 4);
-            return stackPointer;
+        }
+        if (notFound)
+        {
+            printf("not found\n");
+            delay(100);
+
+            SetError(error, SYNTAX_ERROR, ASM_GENERATION, "Symbol does not exist in current scope", parameter->lineNumber);
+            return NULL;
+        }
+        if (isGlobalScope)
+            ASM_StackLoadGlobal(destinationReg, stackPointer->offset * 4);
+        else
+            ASM_StackLoad(destinationReg, stackPointer->offset * 4);
+        return stackPointer;
         //}
     }
     else if (parameter->type == STACK_POINTER_TOKEN)
     {
         printf("param is STACK_POINTER_TOKEN\n");
+        delay(100);
         uint16_t stackPointerIndex = 0;
         sscanf(parameter->value, "%hu", &stackPointerIndex);
         uint32_t offset = ((StackPointer *)ListGetIndex((GeneralList *)PeekList(scopes), stackPointerIndex))->offset;
@@ -385,6 +417,7 @@ StackPointer *LoadParameter(Error *error, Token *parameter, Registers destinatio
     else
     {
         printf("param is literal\n");
+        delay(100);
         IdentifierType type = TypeOfString(parameter->value);
         if (type == BOOL)
         {
@@ -401,7 +434,7 @@ StackPointer *LoadParameter(Error *error, Token *parameter, Registers destinatio
             uint8_t matches = sscanf(parameter->value, "%u", &value);
             if (matches == 0)
             {
-                SetError(error, SYNTAX_ERROR, ASM_GENERATION, "uint32_t does not match format", 0);
+                SetError(error, SYNTAX_ERROR, ASM_GENERATION, "uint32_t does not match format", parameter->lineNumber);
             }
             ASM_Imm(destinationReg, value);
         }
@@ -412,7 +445,7 @@ StackPointer *LoadParameter(Error *error, Token *parameter, Registers destinatio
             uint8_t matches = sscanf(parameter->value, "%d", &value);
             if (matches == 0)
             {
-                SetError(error, SYNTAX_ERROR, ASM_GENERATION, "uint32_t does not match format", 0);
+                SetError(error, SYNTAX_ERROR, ASM_GENERATION, "uint32_t does not match format", parameter->lineNumber);
             }
             ASM_Imm(destinationReg, value);
         }
@@ -430,7 +463,7 @@ StackPointer *LoadParameter(Error *error, Token *parameter, Registers destinatio
             {
                 printf("str format error\n");
 
-                SetError(error, SYNTAX_ERROR, ASM_GENERATION, "string does not match format", 0);
+                SetError(error, SYNTAX_ERROR, ASM_GENERATION, "string does not match format", parameter->lineNumber);
                 return NULL;
             }
             printf("Scopes: %d\n", scopes->count);
@@ -449,6 +482,9 @@ StackPointer *LoadParameter(Error *error, Token *parameter, Registers destinatio
         }
         return NULL;
     }
+    printf("Parameter is none!\n");
+    SetError(error, UNEXPECTED_NULL, ASM_GENERATION, "Parameter is invalid", parameter->lineNumber);
+    return NULL;
 }
 void PostfixToASM(Error *error, GeneralList *postfix, GeneralList *variableStack)
 {
@@ -486,8 +522,8 @@ void PostfixToASM(Error *error, GeneralList *postfix, GeneralList *variableStack
             }
             Token *currentToken = (Token *)ListGetIndex(postfix, index);
             printf("current: %s\n", currentToken->value);
-            sleep_ms(60);
-            if (currentToken->type == FUNCTION)
+            delay(60);
+            if (currentToken->type == IDENTIFIER)
             {
                 printf("Function found\n");
                 Identifier *function = NULL;
@@ -500,6 +536,15 @@ void PostfixToASM(Error *error, GeneralList *postfix, GeneralList *variableStack
                         break;
                     }
                 }
+                if (function->funcOrVar != FUNCTION)
+                {
+                    index++;
+                    printf("Not a function, skipping\n");
+                    continue;
+                }
+                ASM_Imm(S0, function->parameters.count * 4 + 4);
+                ASM_Move(S0, A2);
+                ASM_JumpStringAndLink(S2, "push");
                 for (int i = 0; i < function->parameters.count; i++)
                 {
                     Token *parameter = (Token *)ListGetIndex(postfix, index - function->parameters.count + i);
@@ -509,22 +554,33 @@ void PostfixToASM(Error *error, GeneralList *postfix, GeneralList *variableStack
                         SetError(error, UNEXPECTED_NULL, ASM_GENERATION, "Function missing parameter", lineNumber);
                         goto exit;
                     }
-                    StackPointer *stackPointer = LoadParameter(error, parameter, A2 + i, variableStack);
+                    printf("loading param %d...\n", i);
+                    StackPointer *stackPointer = LoadParameter(error, parameter, S0, variableStack);
+                    printf("loaded\n");
+                    delay(100);
                     if (error->errorCode != NO_ERROR)
                     {
+                        printf("load err\n");
+                        delay(100);
                         error->line = currentToken->lineNumber;
                         goto exit;
                     }
+                    ASM_JumpStringAndLink(S2, "push");
                 }
-                ASM_LoadAddress(A1, function->labelNumber);
-                ASM_JumpStringAndLink(A7, "callFunction");
+                printf("calling\n");
+                delay(100);
+                CallFunction(function);
+                printf("function called\n");
+                delay(100);
 
                 for (int i = 0; i < function->parameters.count + 1; i++)
                 {
+                    printf("deleting parameter %d/%d, at index %s\n", i, function->parameters.count + 1, index - function->parameters.count);
+                    delay(100);
                     free(DeleteListElement(postfix, index - function->parameters.count));
                 }
-                ASM_StackPush(T1);
-                UpdateStackList("TEMP", STACK_POINTER);
+                ASM_StackPush(A0);
+                UpdateStackList("RET_VAL", STACK_POINTER);
 
                 Token *newToken = malloc(sizeof(Token));
                 newToken->type = STACK_POINTER_TOKEN;
@@ -746,6 +802,7 @@ void PostfixToASM(Error *error, GeneralList *postfix, GeneralList *variableStack
             index++;
         }
     printf("Postfix converted, tokens left: %d\n", postfix->count);
+    delay(100);
     if (postfix->count > 1)
     {
         SetError(error, SYNTAX_ERROR, ASM_GENERATION, "Equation did not simplfiy", lineNumber);

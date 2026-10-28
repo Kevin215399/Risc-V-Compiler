@@ -78,7 +78,7 @@ Identifier *DeclareVariable(Error *error, GeneralList *variableStack, TreeNode *
     nameNode = (TreeNode *)ListGetIndex(&nameNode->children, 0);
 
     printf("a:\n");
-    sleep_ms(100);
+    delay(100);
     if (FindSymbol(variableStack, ((Token *)nameNode->content)->value) != NULL)
     {
         SetError(error, DUPLICATE, SEMANTIC_ANALYZER, "Symbol was already defined earlier", 0);
@@ -86,7 +86,7 @@ Identifier *DeclareVariable(Error *error, GeneralList *variableStack, TreeNode *
     }
 
     printf("a1:\n");
-    sleep_ms(100);
+    delay(100);
     Identifier *newVar = (Identifier *)malloc(sizeof(Identifier));
     if (newVar != NULL)
     {
@@ -97,14 +97,14 @@ Identifier *DeclareVariable(Error *error, GeneralList *variableStack, TreeNode *
         printf("failed newVar\n");
     }
     printf("a2");
-    sleep_ms(100);
+    delay(100);
 
     newVar->name = malloc(strlen(((Token *)nameNode->content)->value) + 1);
     printf("a3");
     strcpy(newVar->name, ((Token *)nameNode->content)->value);
 
     printf("b:\n");
-    sleep_ms(100);
+    delay(100);
     newVar->type = ParseType(((Token *)typeNode->content)->value);
 
     TreeNode *pointerNode = (TreeNode *)ListGetIndex(&currentNode->children, 3);
@@ -112,7 +112,7 @@ Identifier *DeclareVariable(Error *error, GeneralList *variableStack, TreeNode *
     newVar->pointerDepth = GetPointerDepth(pointerNode);
 
     printf("c:\n");
-    sleep_ms(100);
+    delay(100);
     if (forceVariable)
     {
         newVar->funcOrVar = VARIABLE;
@@ -130,10 +130,10 @@ Identifier *DeclareVariable(Error *error, GeneralList *variableStack, TreeNode *
         }
     }
     printf("Pushing:\n");
-    sleep_ms(100);
+    delay(100);
     PushList(variableStack, newVar);
     printf("pushed %s to symbol table\n", newVar->name);
-    sleep_ms(100);
+    delay(100);
     return newVar;
 }
 void EvaluateExpression(Error *error, TreeNode *currentNode, GeneralList *variableStack)
@@ -205,12 +205,40 @@ void InitializeStdFunctions(GeneralList *variableStack)
     stdFunction->type = VOID;
     PushList(variableStack, stdFunction);
 
-    // pinOut
+    // pinMode
     stdFunction = (Identifier *)malloc(sizeof(Identifier));
     stdFunction->funcOrVar = FUNCTION;
-    stdFunction->labelNumber = PIN_OUT;
-    stdFunction->name = malloc(strlen("pinOut") + 1);
-    strcpy(stdFunction->name, "pinOut");
+    stdFunction->labelNumber = PIN_MODE;
+    stdFunction->name = malloc(strlen("pinMode") + 1);
+    strcpy(stdFunction->name, "pinMode");
+    InitializeList(&stdFunction->parameters);
+
+    parameter = (Identifier *)malloc(sizeof(Identifier));
+    parameter->funcOrVar = VARIABLE;
+    parameter->name = (char *)malloc(strlen("pin") + 1);
+    strcpy(parameter->name, "pin");
+    parameter->pointerDepth = 0;
+    parameter->type = UINT8_T;
+    PushList(&stdFunction->parameters, parameter);
+
+    parameter = (Identifier *)malloc(sizeof(Identifier));
+    parameter->funcOrVar = VARIABLE;
+    parameter->name = (char *)malloc(strlen("output") + 1);
+    strcpy(parameter->name, "output");
+    parameter->pointerDepth = 0;
+    parameter->type = BOOL;
+    PushList(&stdFunction->parameters, parameter);
+
+    stdFunction->pointerDepth = 0;
+    stdFunction->type = VOID;
+    PushList(variableStack, stdFunction);
+
+    // pinToggle
+    stdFunction = (Identifier *)malloc(sizeof(Identifier));
+    stdFunction->funcOrVar = FUNCTION;
+    stdFunction->labelNumber = PIN_TOGGLE;
+    stdFunction->name = malloc(strlen("pinToggle") + 1);
+    strcpy(stdFunction->name, "pinToggle");
     InitializeList(&stdFunction->parameters);
 
     parameter = (Identifier *)malloc(sizeof(Identifier));
@@ -225,12 +253,40 @@ void InitializeStdFunctions(GeneralList *variableStack)
     stdFunction->type = VOID;
     PushList(variableStack, stdFunction);
 
-    // pinToggle
+    // pinWrite
     stdFunction = (Identifier *)malloc(sizeof(Identifier));
     stdFunction->funcOrVar = FUNCTION;
-    stdFunction->labelNumber = PIN_TOGGLE;
-    stdFunction->name = malloc(strlen("pinToggle") + 1);
-    strcpy(stdFunction->name, "pinToggle");
+    stdFunction->labelNumber = PIN_WRITE;
+    stdFunction->name = malloc(strlen("pinWrite") + 1);
+    strcpy(stdFunction->name, "pinWrite");
+    InitializeList(&stdFunction->parameters);
+
+    parameter = (Identifier *)malloc(sizeof(Identifier));
+    parameter->funcOrVar = VARIABLE;
+    parameter->name = (char *)malloc(strlen("pin") + 1);
+    strcpy(parameter->name, "pin");
+    parameter->pointerDepth = 0;
+    parameter->type = UINT8_T;
+    PushList(&stdFunction->parameters, parameter);
+
+    parameter = (Identifier *)malloc(sizeof(Identifier));
+    parameter->funcOrVar = VARIABLE;
+    parameter->name = (char *)malloc(strlen("value") + 1);
+    strcpy(parameter->name, "value");
+    parameter->pointerDepth = 0;
+    parameter->type = BOOL;
+    PushList(&stdFunction->parameters, parameter);
+
+    stdFunction->pointerDepth = 0;
+    stdFunction->type = VOID;
+    PushList(variableStack, stdFunction);
+
+    // pinRead
+    stdFunction = (Identifier *)malloc(sizeof(Identifier));
+    stdFunction->funcOrVar = FUNCTION;
+    stdFunction->labelNumber = PIN_READ;
+    stdFunction->name = malloc(strlen("pinRead") + 1);
+    strcpy(stdFunction->name, "pinRead");
     InitializeList(&stdFunction->parameters);
 
     parameter = (Identifier *)malloc(sizeof(Identifier));
@@ -297,7 +353,7 @@ Error *SemanticAnylsis(TreeNode *AST)
         }
         printf("\n");
 
-        sleep_ms(60);
+        delay(60);
 
         char *value = ((Token *)currentNode->content)->value;
         uint16_t lineNumber = ((Token *)currentNode->content)->lineNumber;
@@ -358,6 +414,12 @@ Error *SemanticAnylsis(TreeNode *AST)
             ScopeOpenContext();
             PushByte(&tableIndexices, variableStack.count);
             ASM_Label(currentLabelNum);
+            UpdateStackList("PCount", PARAMETER);
+            for (int i = 0; i < function->parameters.count; i++)
+            {
+                Identifier *parameter = (Identifier *)ListGetIndex(&function->parameters, i);
+                UpdateStackList(parameter->name, PARAMETER);
+            }
             UpdateStackList("T0", REG_STATE);
             UpdateStackList("T1", REG_STATE);
             UpdateStackList("T2", REG_STATE);
@@ -366,18 +428,12 @@ Error *SemanticAnylsis(TreeNode *AST)
             UpdateStackList("T5", REG_STATE);
             UpdateStackList("T6", REG_STATE);
 
-            UpdateStackList("A2", PARAMETER);
-            UpdateStackList("A3", PARAMETER);
-            UpdateStackList("A4", PARAMETER);
-            UpdateStackList("A5", PARAMETER);
-            UpdateStackList("A6", PARAMETER);
-
             UpdateStackList("RETURN", PARAMETER);
             function->labelNumber = currentLabelNum;
             currentLabelNum++;
 
             printf("Function declared\n");
-            sleep_ms(100);
+            delay(100);
         }
 
         if (*((uint8_t *)value) == TERM_OFFSET + ASSIGN)
@@ -439,7 +495,7 @@ Error *SemanticAnylsis(TreeNode *AST)
                 if (((Token *)expressionNode->content)->type == TERM_OFFSET + EXPRESSION)
                 {
                     printf("return has expression\n");
-                    sleep_ms(100);
+                    delay(100);
                     EvaluateExpression(error, expressionNode, &variableStack);
                     if (error->errorCode != NO_ERROR)
                     {
@@ -479,6 +535,8 @@ Error *SemanticAnylsis(TreeNode *AST)
             ASM_StackLoad(T1, offset * 4);
             ASM_Branch("beq", T1, X0, label);
 
+            ScopeOpenContext();
+
             uint32_t *labelChild = (uint32_t *)malloc(sizeof(uint32_t));
             *labelChild = label;
             AppendTree(currentNode, labelChild);
@@ -489,7 +547,7 @@ Error *SemanticAnylsis(TreeNode *AST)
         }
         if (*((uint8_t *)value) == TERM_OFFSET + WHILE)
         {
-
+            ScopeOpenContext();
             ScopeOpenContext();
             printf("while\n");
 
@@ -510,6 +568,7 @@ Error *SemanticAnylsis(TreeNode *AST)
             sscanf(tokenPointer->value, "%hu", &stackPointerIndex);
             uint32_t offset = ((StackPointer *)ListGetIndex((GeneralList *)PeekList(scopes), stackPointerIndex))->offset;
             ASM_StackLoad(T1, offset * 4);
+            CloseScopeContext(false);
             ASM_Branch("beq", T1, X0, endLabel);
 
             uint32_t *labelChild = (uint32_t *)malloc(sizeof(uint32_t));
@@ -631,6 +690,7 @@ Error *SemanticAnylsis(TreeNode *AST)
                     TreeNode *labelNode = (TreeNode *)PopList(&currentNode->children);
                     uint32_t *label = (uint32_t *)labelNode->content;
                     printf("Retrieved reserved label: %d\n", *label);
+                    CloseScopeContext(false);
                     ASM_Label(*label);
                     free(label);
                 }
@@ -673,21 +733,41 @@ Error *SemanticAnylsis(TreeNode *AST)
                             SetError(error, SYNTAX_ERROR, SEMANTIC_ANALYZER, "Function calls can only be used on functions", lineNumber);
                             goto exit;
                         }
-                        switch (identifier->labelNumber)
+                        printf("Current stack list\n");
+                        for (int x = 0; x < scopes->count; x++)
                         {
-                        case PIN_OUT:
-                            ASM_LoadAddressString(A1, "pinOut");
-                            ASM_JumpStringAndLink(A7, "callFunction");
-                            break;
-                        case PIN_TOGGLE:
-                            ASM_LoadAddressString(A1, "pinToggle");
-                            ASM_JumpStringAndLink(A7, "callFunction");
-                            break;
-                        default:
-                            ASM_LoadAddress(A1, identifier->labelNumber);
-                            ASM_JumpStringAndLink(A7, "callFunction");
-                            break;
+                            GeneralList *scope = (GeneralList *)ListGetIndex(scopes, x);
+                            for (int i = 0; i < scope->count; i++)
+                            {
+                                StackPointer *sp = (StackPointer *)ListGetIndex(scope, i);
+                                printf("%s\n", sp->name);
+                            }
+                            printf("scope end");
                         }
+                        TreeNode *parameterNode = (TreeNode *)TreeGetNodeConstant(currentNode, (uint8_t[]){1, 0, 1}, 3);
+                        GeneralList parameters;
+                        InitializeList(&parameters);
+                        while (parameterNode->children.count > 1)
+                        {
+                            TreeNode *expression = (TreeNode *)TreeGetNodeConstant(parameterNode, (uint8_t[]){1, 0}, 2);
+                            printf("Found a parameter\n");
+                            delay(100);
+                            PushList(&parameters, expression);
+                            parameterNode = (TreeNode *)PeekListFirst(&parameterNode->children);
+                        }
+                        printf("All parameters found");
+                        delay(100);
+                        ASM_Imm(S0, parameters.count * 4 + 4);
+                        ASM_Move(S0, A2);
+                        ASM_JumpStringAndLink(S2, "push");
+                        for (int i = 0; i < parameters.count; i++)
+                        {
+                            Token *token = (Token *)((TreeNode *)ListGetIndex(&parameters, i))->content;
+                            LoadParameter(error, token, S0, &variableStack);
+                            ASM_JumpStringAndLink(S2, "push");
+                        }
+
+                        CallFunction(identifier);
                     }
                     else
                     {
@@ -744,6 +824,10 @@ success:
         Identifier *variable = (Identifier *)ListGetIndex(&variableStack, i);
         if (strcmp(variable->name, "main") == 0)
         {
+            ASM_Imm(S0, variable->parameters.count * 4 + 4);
+            ASM_Move(S0, A2);
+            ASM_JumpStringAndLink(S2, "push");
+
             ASM_LoadAddress(A1, variable->labelNumber);
             ASM_JumpStringAndLink(A7, "callFunction");
         }

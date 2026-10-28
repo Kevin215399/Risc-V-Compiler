@@ -15,6 +15,42 @@ extern char *sourceCode;
 
 #pragma region Objects
 
+#define NO_DEBUG 0
+#define PRINT_ONLY 1
+#define PRINT_AND_DELAY 2
+#define DEBUG_MODE PRINT_ONLY
+
+#if DEBUG_MODE != NO_DEBUG
+
+#define debugPrintf(...) printf("DEBUG: " __VA_ARGS__)
+#define debugPrint(x) printf("%s\n", x)
+
+#if DEBUG_MODE == PRINT_AND_DELAY
+#define delay(x) delay(x)
+#else
+#define delay(x) \
+    do           \
+    {            \
+    } while (0)
+#endif
+
+#else
+
+#define debugPrintf(...) \
+    do                   \
+    {                    \
+    } while (0)
+#define debugPrint(x) \
+    do                \
+    {                 \
+    } while (0)
+#define delay(x) \
+    do           \
+    {            \
+    } while (0)
+    
+#endif
+
 typedef enum StackType
 {
     STACK_VAR,
@@ -107,6 +143,9 @@ typedef enum Registers
     T4,
     T5,
     T6,
+    S0,
+    S1,
+    S2
 } Registers;
 char *registerNames[] = {
     "x0",
@@ -127,7 +166,9 @@ char *registerNames[] = {
     "t4",
     "t5",
     "t6",
-};
+    "s0",
+    "s1",
+    "s2"};
 
 #pragma endregion
 

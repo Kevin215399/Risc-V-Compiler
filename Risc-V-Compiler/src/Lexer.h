@@ -194,6 +194,28 @@ Error *LexicalAnylsis(char *code, GeneralList *output)
         }
     }
 
+    // Replace compiler directives;
+    for (int i = 0; i < output->count; i++)
+    {
+        Token *token = (Token *)ListGetIndex(output, i);
+        if (token->type != IDENTIFIER)
+            continue;
+        printf("%s is identifier\n", token->value);
+        for (int x = 0; x < sizeof(compilerDirectives) / sizeof(CompilerDirective); x++)
+        {
+            if (strcmp(token->value, compilerDirectives[x].source) == 0)
+            {
+                printf("%s is match\n", compilerDirectives[x].source);
+                free(token->value);
+                token->value = (char *)malloc(strlen(compilerDirectives[x].replacement) + 1);
+                strcpy(token->value, compilerDirectives[x].replacement);
+                token->type = LITERAL;
+                printf("new Value: %s\n", token->value);
+                break;
+            }
+        }
+    }
+
 exit:
     return error;
 }
