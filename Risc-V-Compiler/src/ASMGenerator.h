@@ -244,6 +244,10 @@ void CallFunction(Identifier *function)
         ASM_LoadAddressString(A1, "pinRead");
         ASM_JumpStringAndLink(A7, "callFunction");
         break;
+    case MALLOC_LABEL:
+        ASM_LoadAddressString(A1, "malloc");
+        ASM_JumpStringAndLink(A7, "callFunction");
+        break;
     default:
         ASM_LoadAddress(A1, function->labelNumber);
         ASM_JumpStringAndLink(A7, "callFunction");

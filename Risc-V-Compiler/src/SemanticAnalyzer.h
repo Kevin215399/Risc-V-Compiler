@@ -121,32 +121,34 @@ Identifier *DeclareVariable(Error *error, GeneralList *variableStack, TreeNode *
     {
         if (IsFunctionDecleration(currentNode))
         {
-            printf("Original node type: %d\n", (int)((Token*)currentNode->content)->type);
-                delay(60);
+            printf("Original node type: %d\n", (int)((Token *)currentNode->content)->type);
+            delay(60);
             newVar->funcOrVar = FUNCTION;
             InitializeList(&newVar->parameters);
-            TreeNode*parameterExplorer = TreeGetNodeConstant(currentNode,(uint8_t[]){0,0,4},3);
+            TreeNode *parameterExplorer = TreeGetNodeConstant(currentNode, (uint8_t[]){0, 0, 4}, 3);
             printf("Finding function params\n");
-            while(parameterExplorer->children.count >1){
-                
-                printf("param detected, explorer node type: %d\n", (int)((Token*)parameterExplorer->content)->type);
+            while (parameterExplorer->children.count > 1)
+            {
+
+                printf("param detected, explorer node type: %d\n", (int)((Token *)parameterExplorer->content)->type);
                 delay(60);
-                Identifier* newParam = (Identifier*)malloc(sizeof(Identifier));
-                char *paramName = ((Token*)TreeGetNodeConstant(parameterExplorer,(uint8_t[]){2,0},2)->content)->value;
+                Identifier *newParam = (Identifier *)malloc(sizeof(Identifier));
+                char *paramName = ((Token *)TreeGetNodeConstant(parameterExplorer, (uint8_t[]){2, 0}, 2)->content)->value;
                 printf("param name %s\n", paramName);
-                newParam->name = malloc(strlen(paramName)+1);
-                strcpy(newParam->name,paramName);
-                newParam->pointerDepth = GetPointerDepth(TreeGetNodeConstant(parameterExplorer,(uint8_t[]){3},1));
+                newParam->name = malloc(strlen(paramName) + 1);
+                strcpy(newParam->name, paramName);
+                newParam->pointerDepth = GetPointerDepth(TreeGetNodeConstant(parameterExplorer, (uint8_t[]){3}, 1));
                 newParam->funcOrVar = VARIABLE;
-                newParam->type = ParseType(((Token*)TreeGetNodeConstant(parameterExplorer,(uint8_t[]){4,0},2)->content)->value);
+                newParam->type = ParseType(((Token *)TreeGetNodeConstant(parameterExplorer, (uint8_t[]){4, 0}, 2)->content)->value);
                 PushList(&newVar->parameters, newParam);
                 printf("Defined param %s\n", paramName);
 
-                TreeNode*paramRest = TreeGetNodeConstant(parameterExplorer,(uint8_t[]){0},1);
-                if(paramRest->children.count <= 1){
+                TreeNode *paramRest = TreeGetNodeConstant(parameterExplorer, (uint8_t[]){0}, 1);
+                if (paramRest->children.count <= 1)
+                {
                     break;
                 }
-                parameterExplorer = TreeGetNodeConstant(paramRest,(uint8_t[]){0},1);
+                parameterExplorer = TreeGetNodeConstant(paramRest, (uint8_t[]){0}, 1);
             }
         }
         else
@@ -325,6 +327,26 @@ void InitializeStdFunctions(GeneralList *variableStack)
     stdFunction->pointerDepth = 0;
     stdFunction->type = VOID;
     PushList(variableStack, stdFunction);
+
+    // malloc
+    stdFunction = (Identifier *)malloc(sizeof(Identifier));
+    stdFunction->funcOrVar = FUNCTION;
+    stdFunction->labelNumber = MALLOC_LABEL;
+    stdFunction->name = malloc(strlen("malloc") + 1);
+    strcpy(stdFunction->name, "malloc");
+    InitializeList(&stdFunction->parameters);
+
+    parameter = (Identifier *)malloc(sizeof(Identifier));
+    parameter->funcOrVar = VARIABLE;
+    parameter->name = (char *)malloc(strlen("bytes") + 1);
+    strcpy(parameter->name, "bytes");
+    parameter->pointerDepth = 0;
+    parameter->type = UINT32_T;
+    PushList(&stdFunction->parameters, parameter);
+
+    stdFunction->pointerDepth = 1;
+    stdFunction->type = VOID;
+    PushList(variableStack, stdFunction);
 }
 Error *SemanticAnylsis(TreeNode *AST)
 {
@@ -450,7 +472,7 @@ Error *SemanticAnylsis(TreeNode *AST)
             {
                 Identifier *parameter = (Identifier *)ListGetIndex(&function->parameters, i);
                 UpdateStackList(parameter->name, PARAMETER);
-                PushList(&variableStack,parameter);
+                PushList(&variableStack, parameter);
             }
             UpdateStackList("T0", REG_STATE);
             UpdateStackList("T1", REG_STATE);
@@ -566,6 +588,38 @@ Error *SemanticAnylsis(TreeNode *AST)
             ASM_StackLoad(T1, offset * 4);
             ASM_Branch("beq", T1, X0, label);
 
+            TreeNode *elseRestNode = TreeGetNodeConstant(currentNode, (uint8_t[]){0, 0}, 2);
+            if (elseRestNode != NULL)
+            {
+                // is an else
+                // 
+                // beq -> L0
+                //      (body)
+                // J L1
+                // L0:
+                //      (body)
+                // L1:
+                //
+
+                // If statement must be "tricked" into creating L1 at the end
+                // so the beq actually goes to the label made by the else
+
+                printf("Else statement\n");
+                uint32_t endLabel = currentLabelNum++;
+
+                TreeNode *elseNode = TreeGetNodeConstant(currentNode, (uint8_t[]){0}, 1);
+
+                uint32_t *labelChild = (uint32_t *)malloc(sizeof(uint32_t));
+                *labelChild = label;
+                AppendTree(elseNode, labelChild);
+
+                labelChild = (uint32_t *)malloc(sizeof(uint32_t));
+                *labelChild = endLabel;
+                AppendTree(elseNode, labelChild);
+
+                label = endLabel;
+            }
+
             ScopeOpenContext(BRANCH_SCOPE);
 
             uint32_t *labelChild = (uint32_t *)malloc(sizeof(uint32_t));
@@ -575,6 +629,30 @@ Error *SemanticAnylsis(TreeNode *AST)
             currentNode = (TreeNode *)TreeGetNodeConstant(currentNode, (uint8_t[]){4}, 1);
             PushByte(&exploreMap, 4);
             continue;
+        }
+        if (*((uint8_t *)value) == TERM_OFFSET + ELSE)
+        {
+            if (currentNode->children.count != 4)
+            {
+                printf("Else missing marker pinned by If\n");
+                SetError(error, UNEXPECTED_NULL, SEMANTIC_ANALYZER, "Else missing If statement", lineNumber);
+                goto exit;
+            }
+            TreeNode *endLabelNode = (TreeNode *)PopList(&currentNode->children);
+            uint32_t *endLabel = (uint32_t *)endLabelNode->content;
+
+            TreeNode *elseLabelNode = (TreeNode *)PopList(&currentNode->children);
+            uint32_t *elseLabel = (uint32_t *)elseLabelNode->content;
+
+            //closes the if statement
+            CloseScopeContext();
+
+            ASM_Jump(*endLabel);
+            ASM_Label(*elseLabel);
+            
+            //opens the else
+            ScopeOpenContext(BRANCH_SCOPE);
+            // is closed by the if (outer)
         }
         if (*((uint8_t *)value) == TERM_OFFSET + WHILE)
         {

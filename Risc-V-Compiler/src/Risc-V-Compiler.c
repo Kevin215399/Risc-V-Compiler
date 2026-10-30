@@ -6,11 +6,6 @@
 #include "SpecialParser.h"
 char *sourceCode = R"(
 
-int RLED = 16;
-int GLED = 17;
-int RBUTTON = 2;
-
-
 void delay(int cycles){
     int x = 0;
     while(x<cycles){
@@ -18,34 +13,28 @@ void delay(int cycles){
     }
     return;
 }
-void Alarm(){
-    while(true){
-        pinToggle(RLED);
-
-        delay(1000000);
-
-        if(!pinRead(RBUTTON)){
-            break;
-        }
-        
+void WriteColor(int x){
+    pinWrite(16,LOW);
+    pinWrite(17,LOW); 
+    pinWrite(18,LOW);
+    if(x==0){
+        pinWrite(16,HIGH);
+    } else if (x==1){
+        pinWrite(17,HIGH); 
+    } else {
+        pinWrite(18,HIGH);
     }
-    pinWrite(RLED,LOW);
-    pinWrite(GLED,HIGH);
-    delay(5000000);
-    pinWrite(GLED,LOW);
-    delay(10000000);
-    
-    Alarm();
-    return;
 }
+
 void main()
 {
 
-    pinMode(RLED,OUTPUT);
-    pinMode(GLED,OUTPUT);
-    pinMode(RBUTTON,INPUT_PULLUP);
+    pinMode(16,OUTPUT);
+    pinMode(17,OUTPUT);
+    pinMode(18,OUTPUT);
 
-    Alarm();
+    int array = malloc(10);
+    
 
     return 0;
 }
