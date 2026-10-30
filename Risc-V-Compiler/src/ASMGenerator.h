@@ -9,6 +9,19 @@
 GeneralList *asmGlobalList;
 GeneralList *asmFunctionList;
 
+typedef enum
+{
+    FUNCTION_SCOPE,
+    BRANCH_SCOPE,
+    LOOP_SCOPE,
+    GLOBAL_SCOPE
+} ScopeType;
+typedef struct
+{
+    ScopeType scopeType;
+    GeneralList symbols;
+} Scope;
+
 GeneralList *scopes;
 
 uint32_t currentLabelNum;
@@ -262,15 +275,16 @@ void PrintASMProgram()
     printf("%s\n", stdFunctions);
 }
 
-void ScopeOpenContext()
+void ScopeOpenContext(ScopeType type)
 {
     printf("Open context %d\n", scopes->count);
     delay(100);
-    GeneralList *newScope = (GeneralList *)malloc(sizeof(GeneralList));
-    InitializeList(newScope);
+    Scope *newScope = (Scope *)malloc(sizeof(Scope));
+    InitializeList(&newScope->symbols);
+    newScope->scopeType = type;
     PushList(scopes, newScope);
 }
-void CloseScopeContext(bool closingFunction)
+void CloseScopeContext()
 {
     printf("Close context %d\n", scopes->count);
     delay(100);
@@ -278,19 +292,22 @@ void CloseScopeContext(bool closingFunction)
     if (scopes->count <= 1)
     {
         printf("BAD NO CLOSE GLOBAL SCOPE!!");
+        return;
     }
-    GeneralList *lastScope = (GeneralList *)PeekList(scopes);
-
-    if (!closingFunction && lastScope->count != 0)
+    Scope *lastScope = (Scope *)PeekList(scopes);
+    printf("scope type: %d\n", (int)lastScope->scopeType);
+    printf("scope symbols: %d\n", lastScope->symbols.count);
+    if (lastScope->scopeType != FUNCTION_SCOPE && lastScope->symbols.count != 0)
     {
-        ASM_Imm(T6, lastScope->count * 4);
+        printf("Not function scope.\n");
+        ASM_Imm(T6, lastScope->symbols.count * 4);
         ASM_Math("sub", SP, T6, SP);
     }
     PopList(scopes);
 
-    while (lastScope->count > 0)
+    while (lastScope->symbols.count > 0)
     {
-        free(PopList(lastScope));
+        free(PopList(&lastScope->symbols));
     }
     free(lastScope);
 }
@@ -300,15 +317,15 @@ void UpdateStackList(char *name, StackType type)
     uint32_t newLocation = 0;
     if (scopes->count == 1)
     {
-        GeneralList *scope = (GeneralList *)PeekListFirst(scopes);
-        newLocation += scope->count;
+        Scope *scope = (Scope *)PeekListFirst(scopes);
+        newLocation += scope->symbols.count;
     }
     else
     {
         for (int x = 1; x < scopes->count; x++)
         {
-            GeneralList *scope = (GeneralList *)ListGetIndex(scopes, x);
-            newLocation += scope->count;
+            Scope *scope = (Scope *)ListGetIndex(scopes, x);
+            newLocation += scope->symbols.count;
         }
     }
     StackPointer *newPointer = malloc(sizeof(StackPointer));
@@ -316,7 +333,7 @@ void UpdateStackList(char *name, StackType type)
     strcpy(newPointer->name, name);
     newPointer->offset = newLocation;
     newPointer->type = type;
-    PushList((GeneralList *)PeekList(scopes), newPointer);
+    PushList(&((Scope *)PeekList(scopes))->symbols, newPointer);
     printf("New stack var: %s\n", newPointer->name);
 }
 
@@ -330,7 +347,7 @@ void SetASMDestination()
     InitializeList(scopes);
 
     currentLabelNum = 0;
-    ScopeOpenContext();
+    ScopeOpenContext(GLOBAL_SCOPE);
 }
 
 ///////////////////////////////////
@@ -371,10 +388,10 @@ StackPointer *LoadParameter(Error *error, Token *parameter, Registers destinatio
         bool isGlobalScope = false;
         for (int x = 0; x < scopes->count; x++)
         {
-            GeneralList *scope = ((GeneralList *)ListGetIndex(scopes, x));
-            for (int i = 0; i < scope->count; i++)
+            Scope *scope = ((Scope *)ListGetIndex(scopes, x));
+            for (int i = 0; i < scope->symbols.count; i++)
             {
-                StackPointer *checkPointer = ListGetIndex(scope, i);
+                StackPointer *checkPointer = ListGetIndex(&scope->symbols, i);
                 printf("checking scope: %s\n", checkPointer->name);
                 if (strcmp(checkPointer->name, parameter->value) == 0)
                 {
@@ -410,7 +427,7 @@ StackPointer *LoadParameter(Error *error, Token *parameter, Registers destinatio
         delay(100);
         uint16_t stackPointerIndex = 0;
         sscanf(parameter->value, "%hu", &stackPointerIndex);
-        uint32_t offset = ((StackPointer *)ListGetIndex((GeneralList *)PeekList(scopes), stackPointerIndex))->offset;
+        uint32_t offset = ((StackPointer *)ListGetIndex(&((Scope *)PeekList(scopes))->symbols, stackPointerIndex))->offset;
         ASM_StackLoad(destinationReg, offset * 4);
         return NULL;
     }
@@ -467,7 +484,7 @@ StackPointer *LoadParameter(Error *error, Token *parameter, Registers destinatio
                 return NULL;
             }
             printf("Scopes: %d\n", scopes->count);
-            uint16_t litLoc = ((GeneralList *)PeekList(scopes))->count;
+            uint16_t litLoc = ((Scope *)PeekList(scopes))->symbols.count;
             for (int i = 1; i < strlen(parameter->value) - 1; i++)
             {
                 printf("%d\n", i);
@@ -507,7 +524,7 @@ void PostfixToASM(Error *error, GeneralList *postfix, GeneralList *variableStack
         newToken->type = STACK_POINTER_TOKEN;
         newToken->lineNumber = lineNumber;
 
-        uint16_t stackIndex = ((GeneralList *)PeekList(scopes))->count - 1;
+        uint16_t stackIndex = ((Scope *)PeekList(scopes))->symbols.count - 1;
         newToken->value = malloc(IntLength(stackIndex) + 1);
         sprintf(newToken->value, "%hu", stackIndex);
         PushList(postfix, newToken);
@@ -586,7 +603,7 @@ void PostfixToASM(Error *error, GeneralList *postfix, GeneralList *variableStack
                 newToken->type = STACK_POINTER_TOKEN;
                 newToken->lineNumber = currentToken->lineNumber;
 
-                uint16_t stackIndex = ((GeneralList *)PeekList(scopes))->count - 1;
+                uint16_t stackIndex = ((Scope *)PeekList(scopes))->symbols.count - 1;
                 newToken->value = malloc(IntLength(stackIndex) + 1);
                 sprintf(newToken->value, "%hu", stackIndex);
                 printf("insert to : %d\n", index - function->parameters.count);
@@ -789,7 +806,7 @@ void PostfixToASM(Error *error, GeneralList *postfix, GeneralList *variableStack
                 newToken->type = STACK_POINTER_TOKEN;
                 newToken->lineNumber = currentToken->lineNumber;
 
-                uint16_t stackIndex = ((GeneralList *)PeekList(scopes))->count - 1;
+                uint16_t stackIndex = ((Scope *)PeekList(scopes))->symbols.count - 1;
                 newToken->value = malloc(IntLength(stackIndex) + 1);
                 sprintf(newToken->value, "%hu", stackIndex);
                 printf("insert to : %d\n", index - operator->parameters);

@@ -6,73 +6,47 @@
 #include "SpecialParser.h"
 char *sourceCode = R"(
 
-void main()
-{
-    int RLED = 16;
-    int GLED = 17;
-    int BLED = 18;
+int RLED = 16;
+int GLED = 17;
+int RBUTTON = 2;
 
-    pinMode(16,OUTPUT);
-    pinMode(17,OUTPUT);
-    pinMode(18,OUTPUT);
-    pinMode(2,INPUT_PULLUP);
-    pinMode(3,INPUT_PULLUP);
-    pinMode(4,INPUT_PULLUP);
-    pinMode(5,INPUT_PULLUP);
 
-    int blink = 0;
-    bool mode = 0;
-
+void delay(int cycles){
+    int x = 0;
+    while(x<cycles){
+        x+=1;
+    }
+    return;
+}
+void Alarm(){
     while(true){
-        if(!pinRead(2)){
-            if(mode == 0){
-                pinWrite(RLED,HIGH);
-            }
-            if(mode == 1 && blink == 0){
-                pinToggle(RLED);
-            }
-        }
-        if(pinRead(2)){
-            pinWrite(RLED,LOW);
-        }
-            
-        if(!pinRead(3)){
-            if(mode == 0){
-                pinWrite(GLED,HIGH);
-            }
-            if(mode == 1 && blink == 0){
-                pinToggle(GLED);
-            }
-        }
-        if(pinRead(3)){
-            pinWrite(GLED,LOW);
-        }
-            
-        if(!pinRead(4)){
-            if(mode == 0){
-                pinWrite(BLED,HIGH);
-            }
-            if(mode == 1 && blink == 0){
-                pinToggle(BLED);
-            }
-        }
-        if(pinRead(4)){
-            pinWrite(BLED,LOW);
-        }
+        pinToggle(RLED);
 
-        if(!pinRead(5)){
-            mode ^= 1;
-            int wait = 0;
-            while(wait < 1000000){
-                wait+=1;
-            }
-        }
-        blink += 1;
-        if(blink > 10000){
-            blink = 0;
+        delay(1000000);
+
+        if(!pinRead(RBUTTON)){
+            break;
         }
         
     }
+    pinWrite(RLED,LOW);
+    pinWrite(GLED,HIGH);
+    delay(5000000);
+    pinWrite(GLED,LOW);
+    delay(10000000);
+    
+    Alarm();
+    return;
+}
+void main()
+{
+
+    pinMode(RLED,OUTPUT);
+    pinMode(GLED,OUTPUT);
+    pinMode(RBUTTON,INPUT_PULLUP);
+
+    Alarm();
+
     return 0;
 }
 
@@ -121,6 +95,8 @@ int main()
     }
     free(error);
 
+    //  goto inspect;
+
     SetASMDestination();
 
     error = SemanticAnylsis(tree);
@@ -136,6 +112,7 @@ int main()
     PrintASMProgram();
 
 inspect:
+    sleep_ms(1000);
     char message[32] = {'\0'};
     uint8_t messageIndex = 0;
     GeneralList navigation;

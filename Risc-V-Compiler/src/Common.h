@@ -18,6 +18,8 @@ extern char *sourceCode;
 #define NO_DEBUG 0
 #define PRINT_ONLY 1
 #define PRINT_AND_DELAY 2
+
+//change this
 #define DEBUG_MODE PRINT_ONLY
 
 #if DEBUG_MODE != NO_DEBUG
@@ -26,7 +28,7 @@ extern char *sourceCode;
 #define debugPrint(x) printf("%s\n", x)
 
 #if DEBUG_MODE == PRINT_AND_DELAY
-#define delay(x) delay(x)
+#define delay(x) sleep_ms(x)
 #else
 #define delay(x) \
     do           \

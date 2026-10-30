@@ -232,7 +232,6 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
         break;
         case IDENTIFIER:
         {
-            Token *peekNext = (Token *)ListGetIndex(tokens, 0);
             if (castPhase != NO_CAST)
             {
                 SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Symbols are not allowed within a cast", 0);
@@ -243,6 +242,20 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
             {
                 SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Symbol not defined in current scope", 0);
                 goto exit;
+            }
+
+            Token *peekNext = (Token *)ListGetIndex(tokens, 0);
+            if (peekNext == NULL)
+            {
+                printf("no next\n");
+                if (symbol->funcOrVar == FUNCTION)
+                {
+                    SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Symbol is function, but is missing call", 0);
+                    goto exit;
+                }
+                printf("Pushing identifier out\n");
+                PushList(outputStack, currentToken);
+                continue;
             }
             if (symbol->funcOrVar == FUNCTION)
             {
@@ -271,6 +284,7 @@ Error *ShuntYard(GeneralList *tokens, GeneralList *variableStack, GeneralList *o
                     SetError(error, SYNTAX_ERROR, SPECIAL_PARSER, "Symbol is variable, but has a call", 0);
                     goto exit;
                 }
+                printf("Pushing identifier out\n");
                 PushList(outputStack, currentToken);
             }
         }
